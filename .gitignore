@@ -1,0 +1,37 @@
+# Hexyn AWS local configuration
+.hexyn-aws/
+
+# Binaries
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test and Coverage
+*.test
+*.out
+coverage.txt
+*.coverprofile
+
+# Go
+vendor/
+go.work
+go.work.sum
+
+# Misc
+.env
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# IDE Files
+.vscode/
+.idea/
+*.swp
+*.swo
