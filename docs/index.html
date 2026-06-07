@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hexyn AWS — High-Performance AWS TUI</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <link rel="alternate icon" href="logo.svg">
+    <link rel="mask-icon" href="logo.svg" color="#000000">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #000; }
+        .gradient-text {
+            background: linear-gradient(to right, #fff, #9ca3af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="text-gray-100 selection:bg-indigo-500/30 font-sans">
+    <div class="relative overflow-hidden pt-24 pb-32">
+        <div class="relative max-w-3xl mx-auto px-6">
+            <!-- Header -->
+            <header class="text-center mb-24">
+                <div class="flex justify-center mb-8">
+                    <img src="logo.svg" alt="Hexyn AWS Logo" class="w-20 h-20">
+                </div>
+                <div class="inline-flex items-center px-3 py-1 rounded-full bg-white/5 border border-white/10 text-gray-400 text-xs font-semibold mb-6 tracking-wide uppercase">
+                    Private Tool
+                </div>
+                <h1 class="text-6xl font-extrabold tracking-tighter mb-6 gradient-text">
+                    Hexyn AWS
+                </h1>
+                <p class="text-xl text-gray-400 leading-relaxed">
+                    A fast, parallelized TUI tool for managing AWS SSM Parameter Store and ECS Task Definitions.
+                </p>
+            </header>
+
+            <!-- Installation -->
+            <div class="mb-32">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-gray-500 mb-8 text-center">Installation</h2>
+                <div class="space-y-6">
+                    <!-- Unix -->
+                    <div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
+                        <div class="flex items-center mb-4">
+                            <span class="text-sm font-bold text-gray-300">macOS / Linux</span>
+                        </div>
+                        <div class="flex items-center bg-black border border-white/5 rounded-xl p-4">
+                            <code id="cmd-unix" class="text-sm font-mono text-indigo-300 truncate mr-4">curl -fsSL https://flockyn.github.io/hexyn-aws/install.sh | bash</code>
+                            <button onclick="copy('cmd-unix', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Windows -->
+                    <div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
+                        <div class="flex items-center mb-4">
+                            <span class="text-sm font-bold text-gray-300">Windows (PowerShell)</span>
+                        </div>
+                        <div class="flex items-center bg-black border border-white/5 rounded-xl p-4">
+                            <code id="cmd-win" class="text-sm font-mono text-indigo-300 truncate mr-4">iwr https://flockyn.github.io/hexyn-aws/install.ps1 | iex</code>
+                            <button onclick="copy('cmd-win', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-center text-sm text-gray-500 italic">
+                        Note: You will be prompted for a GitHub Personal Access Token (PAT) during installation.
+                    </p>
+                </div>
+            </div>
+
+            <!-- FAQ -->
+            <div class="mb-32">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-gray-500 mb-12 text-center">Frequently Asked Questions</h2>
+                <div class="space-y-12">
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-3">Why do I need a GitHub Token?</h3>
+                        <p class="text-gray-400 leading-relaxed">
+                            Since Hexyn AWS is hosted in a private repository, the installer requires a Personal Access Token (PAT) with <code>read:packages</code> or <code>repo</code> scope to download the official binary releases.
+                        </p>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-3">Which operating systems are supported?</h3>
+                        <p class="text-gray-400 leading-relaxed">
+                            We provide native binaries for Linux (AMD64/ARM64), macOS (Intel/Apple Silicon), and Windows (AMD64). All installations are self-contained.
+                        </p>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-3">How do I update to the latest version?</h3>
+                        <p class="text-gray-400 leading-relaxed mb-4">
+                            You can update directly from the CLI by running:
+                        </p>
+                        <div class="flex items-center bg-black border border-white/5 rounded-xl p-4 mb-4">
+                            <code id="cmd-update" class="text-sm font-mono text-indigo-300 truncate mr-4">hexyn-aws update</code>
+                            <button onclick="copy('cmd-update', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">
+                                Copy
+                            </button>
+                        </div>
+                        <p class="text-gray-400 leading-relaxed">
+                            Alternatively, you can re-run the installation command above.
+                        </p>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-3">Is it secure to use my token in the script?</h3>
+                        <p class="text-gray-400 leading-relaxed">
+                            Yes. The script only uses your token to authenticate with the GitHub API for the download. Your token is never stored or sent to any third-party servers.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <footer class="pt-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8">
+                <div class="text-sm text-gray-600">
+                    &copy; 2026 Hexyn AWS.
+                </div>
+                <div class="flex space-x-8 text-sm text-gray-500">
+                    <a href="mailto:contact@flockyn.com" class="hover:text-white transition-colors font-medium">Support</a>
+                    <span class="text-gray-800">|</span>
+                    <span class="cursor-default">Private Repository</span>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        function copy(id, btn) {
+            const text = document.getElementById(id).innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                const original = btn.innerText;
+                btn.innerText = 'Copied!';
+                btn.classList.add('text-green-400');
+                setTimeout(() => {
+                    btn.innerText = original;
+                    btn.classList.remove('text-green-400');
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
