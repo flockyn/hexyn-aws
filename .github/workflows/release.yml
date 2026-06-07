@@ -1,0 +1,105 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.2'
+          check-latest: true
+
+      - name: Run Tests with Coverage
+        run: make test-coverage
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-changelog:
+    name: Update Changelog
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Get Release Notes
+        id: release_notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(gh release view ${{ github.ref_name }} --json body --jq '.body')
+          echo "BODY<<EOF" >> $GITHUB_ENV
+          echo "$BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Update CHANGELOG.md
+        run: |
+          TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
+          DATE=$(date +'%Y-%m-%d')
+
+          # Get previous tag for the compare link
+          # Sort tags by version (assuming semver)
+          PREV_TAG=$(git tag --sort=-v:refname | grep -A 1 "^${TAG}$" | tail -n 1)
+
+          if [ "$PREV_TAG" = "$TAG" ] || [ -z "$PREV_TAG" ]; then
+            # If this is the first tag, point to the commit
+            URL="https://github.com/$REPO/commits/$TAG"
+          else
+            URL="https://github.com/$REPO/compare/$PREV_TAG...$TAG"
+          fi
+
+          # 1. Update the [Unreleased] link to point from the NEW tag to main
+          sed -i "s|## \[Unreleased\].*|## [Unreleased](https://github.com/$REPO/compare/$TAG...main)|" CHANGELOG.md
+
+          # 2. Prepare the new version block
+          HEADER="## [$TAG]($URL) - $DATE"
+          echo -e "\n$HEADER\n\n$BODY" > new_block.md
+
+          # 3. Insert after the "Content should be placed here" comment
+          LINE=$(grep -n "<!-- Content should be placed here -->" CHANGELOG.md | cut -d: -f1)
+
+          if [ -z "$LINE" ]; then
+            # Fallback: find the first ## after [Unreleased]
+            LINE=$(grep -n "^## " CHANGELOG.md | head -n 2 | tail -n 1 | cut -d: -f1)
+            [ -z "$LINE" ] && LINE=10
+          fi
+
+          head -n $LINE CHANGELOG.md > top.md
+          tail -n +$((LINE+1)) CHANGELOG.md > bottom.md
+          cat top.md new_block.md bottom.md > CHANGELOG.md
+
+          # Cleanup
+          rm new_block.md top.md bottom.md
+
+      - name: Commit and Push
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update CHANGELOG.md for ${{ github.ref_name }}"
+          file_pattern: 'CHANGELOG.md'
+          branch: main
