@@ -16,6 +16,16 @@ type commandRunner struct {
 	svc *secrets.Service
 }
 
+// outputLabel formats the user-facing destination path, collapsing an empty
+// subdirectory to the base output/ directory instead of "output//". The
+// receiver is unused; it keeps the helper grouped on commandRunner.
+func (*commandRunner) outputLabel(subDir string) string {
+	if subDir == "" {
+		return "output/"
+	}
+	return "output/" + subDir + "/"
+}
+
 func (c *commandRunner) checkSession() tea.Cmd {
 	return func() tea.Msg {
 		session, err := c.svc.CheckSession(context.Background())
@@ -94,7 +104,7 @@ func (c *commandRunner) getByPath(t secrets.ParamTarget, outDir string) tea.Cmd 
 		if err := c.svc.PullByPath(context.Background(), t, outDir); err != nil {
 			return resultMsg{err: err}
 		}
-		return resultMsg{message: fmt.Sprintf("Successfully exported parameters to output/%s/", outDir)}
+		return resultMsg{message: "Successfully exported parameters to " + c.outputLabel(outDir)}
 	}
 }
 
@@ -103,7 +113,7 @@ func (c *commandRunner) getByTaskDef(t secrets.TaskTarget) tea.Cmd {
 		if err := c.svc.PullByTaskDef(context.Background(), t); err != nil {
 			return resultMsg{err: err}
 		}
-		return resultMsg{message: fmt.Sprintf("Successfully exported task definition secrets to output/%s/", t.OutputDir)}
+		return resultMsg{message: "Successfully exported task definition secrets to " + c.outputLabel(t.OutputDir)}
 	}
 }
 
