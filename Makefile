@@ -3,16 +3,22 @@ BIN_DIR=$(shell pwd)/bin
 GORELEASER=$(BIN_DIR)/goreleaser
 GOIMPORTS=$(BIN_DIR)/goimports
 LINTER=$(BIN_DIR)/golangci-lint
+MOCKERY=$(BIN_DIR)/mockery
 
-.PHONY: all tools fmt lint test test-coverage check build build-all clean
+.PHONY: all tools mocks fmt lint test test-coverage check build build-all clean
 
 all: fmt lint test build
+
+mocks:
+	@echo "Generating mocks..."
+	$(MOCKERY)
 
 tools:
 	@echo "Installing tools to $(BIN_DIR)..."
 	@mkdir -p $(BIN_DIR)
 	GOBIN=$(BIN_DIR) go install github.com/goreleaser/goreleaser/v2@latest
 	GOBIN=$(BIN_DIR) go install golang.org/x/tools/cmd/goimports@latest
+	GOBIN=$(BIN_DIR) go install github.com/vektra/mockery/v3
 	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(BIN_DIR) v2.12.2
 
 fmt:
@@ -31,6 +37,7 @@ test:
 test-coverage:
 	@echo "Running tests with coverage..."
 	go test -v -coverprofile=coverage.txt -covermode=atomic ./...
+	@grep -vE 'hexyn-aws/(test/|cmd/|main\.go)' coverage.txt > coverage.tmp && mv coverage.tmp coverage.txt
 	go tool cover -func=coverage.txt
 
 check:
@@ -50,4 +57,4 @@ clean:
 	@echo "Cleaning binaries and dist..."
 	@rm -f $(BIN_DIR)/$(BINARY_NAME)
 	@rm -rf dist/
-	@rm -f coverage.txt
+	@rm -f coverage.txt coverage.tmp
