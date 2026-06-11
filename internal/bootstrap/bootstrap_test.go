@@ -3,11 +3,11 @@ package bootstrap
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"hexyn-aws/internal/config"
 )
 
 func TestNewServiceReturnsService(t *testing.T) {
-	if NewService(config.New(true)) == nil {
-		t.Fatal("NewService returned nil")
-	}
+	assert.NotNil(t, NewService(config.New(true)), "NewService returned nil")
 }

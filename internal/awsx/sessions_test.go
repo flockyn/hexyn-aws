@@ -1,45 +1,48 @@
-package awsx
+package awsx_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/stretchr/testify/assert"
+
+	"hexyn-aws/internal/awsx"
+	mocks "hexyn-aws/test/mocks/awsx"
 )
 
-type fakeEC2 struct {
-	out *ec2.DescribeRegionsOutput
-	err error
+// Check short-circuits on a credential load error before touching AWS, returning
+// the error and carrying through the credential source for the UI.
+func TestCheckPropagatesCredentialLoadError(t *testing.T) {
+	loader := mocks.NewMockCredentialLoader(t)
+	loader.EXPECT().Load().Return(awsx.LoadedCredentials{Source: "env"}, errors.New("no creds"))
+
+	sess, err := awsx.NewSessions(loader).Check(context.Background())
+	assert.Error(t, err)
+	assert.Equal(t, "env", sess.CredSource)
 }
 
-func (f fakeEC2) DescribeRegions(_ context.Context, _ *ec2.DescribeRegionsInput, _ ...func(*ec2.Options)) (*ec2.DescribeRegionsOutput, error) {
-	return f.out, f.err
+// Check reports ErrCredentialsExpired when the access key/secret are absent,
+// again without making any AWS call.
+func TestCheckExpiredWhenKeysMissing(t *testing.T) {
+	loader := mocks.NewMockCredentialLoader(t)
+	loader.EXPECT().Load().Return(awsx.LoadedCredentials{
+		Source:   "file",
+		Profile:  "admin",
+		CredsMap: map[string]string{}, // no aws_access_key_id / aws_secret_access_key
+	}, nil)
+
+	sess, err := awsx.NewSessions(loader).Check(context.Background())
+	assert.ErrorIs(t, err, awsx.ErrCredentialsExpired)
+	assert.Equal(t, "admin", sess.Profile)
 }
 
-func TestSessionsListRegionsSuccess(t *testing.T) {
-	fake := fakeEC2{out: &ec2.DescribeRegionsOutput{Regions: []ec2types.Region{
-		{RegionName: aws.String("ap-southeast-3")},
-		{RegionName: aws.String("us-east-1")},
-	}}}
+// ListEnabledRegions surfaces a credential-load failure from BuildConfig rather
+// than falling back to the region list.
+func TestListEnabledRegionsPropagatesConfigError(t *testing.T) {
+	loader := mocks.NewMockCredentialLoader(t)
+	loader.EXPECT().Load().Return(awsx.LoadedCredentials{}, errors.New("boom"))
 
-	got, err := (&Sessions{}).listRegions(context.Background(), fake)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 || got[0] != "ap-southeast-3" {
-		t.Fatalf("unexpected regions: %v", got)
-	}
-}
-
-func TestSessionsListRegionsFallback(t *testing.T) {
-	got, err := (&Sessions{}).listRegions(context.Background(), fakeEC2{err: errors.New("network down")})
-	if err != nil {
-		t.Fatalf("fallback should not return an error: %v", err)
-	}
-	if len(got) == 0 {
-		t.Fatal("expected non-empty fallback region list")
-	}
+	_, err := awsx.NewSessions(loader).ListEnabledRegions(context.Background())
+	assert.Error(t, err)
 }

@@ -1,24 +1,20 @@
 package awsx
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestParameterIsSecure(t *testing.T) {
-	if !(Parameter{Type: ParameterTypeSecureString}).IsSecure() {
-		t.Error("SecureString parameter should report IsSecure() == true")
-	}
-	if (Parameter{Type: ParameterTypeString}).IsSecure() {
-		t.Error("String parameter should report IsSecure() == false")
-	}
+	assert.True(t, Parameter{Type: ParameterTypeSecureString}.IsSecure(), "SecureString parameter should report IsSecure() == true")
+	assert.False(t, Parameter{Type: ParameterTypeString}.IsSecure(), "String parameter should report IsSecure() == false")
 }
 
 func TestSessionDisplayName(t *testing.T) {
 	withAlias := Session{AccountID: "123456789012", AccountAlias: "prod"}
-	if got := withAlias.DisplayName(); got != "prod" {
-		t.Errorf("expected alias to win, got %q", got)
-	}
+	assert.Equal(t, "prod", withAlias.DisplayName(), "expected alias to win")
 
 	noAlias := Session{AccountID: "123456789012"}
-	if got := noAlias.DisplayName(); got != "123456789012" {
-		t.Errorf("expected account id fallback, got %q", got)
-	}
+	assert.Equal(t, "123456789012", noAlias.DisplayName(), "expected account id fallback")
 }

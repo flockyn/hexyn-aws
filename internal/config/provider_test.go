@@ -4,92 +4,60 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"hexyn-aws/test/fixtures"
 )
 
 func TestNewInitModeUsesLocalDir(t *testing.T) {
 	p := New(true)
 
-	if !p.IsInitMode() {
-		t.Fatal("expected IsInitMode to be true")
-	}
-	if p.BaseDir() != ".hexyn-aws" {
-		t.Fatalf("expected baseDir %q, got %q", ".hexyn-aws", p.BaseDir())
-	}
+	assert.True(t, p.IsInitMode(), "expected IsInitMode to be true")
+	assert.Equal(t, ".hexyn-aws", p.BaseDir())
 }
 
 func TestNewPrefersLocalDirWhenPresent(t *testing.T) {
 	dir := t.TempDir()
-	chdir(t, dir)
-	if err := os.Mkdir(".hexyn-aws", 0o755); err != nil {
-		t.Fatal(err)
-	}
+	fixtures.Chdir(t, dir)
+	require.NoError(t, os.Mkdir(".hexyn-aws", 0o755))
 
 	p := New(false)
 
-	if p.BaseDir() != ".hexyn-aws" {
-		t.Fatalf("expected local baseDir, got %q", p.BaseDir())
-	}
-	if p.IsInitMode() {
-		t.Fatal("expected IsInitMode false when local flag not set")
-	}
+	assert.Equal(t, ".hexyn-aws", p.BaseDir(), "expected local baseDir")
+	assert.False(t, p.IsInitMode(), "expected IsInitMode false when local flag not set")
 }
 
 func TestNewFallsBackToHomeDir(t *testing.T) {
-	chdir(t, t.TempDir()) // no local .hexyn-aws here
+	fixtures.Chdir(t, t.TempDir()) // no local .hexyn-aws here
 
 	p := New(false)
 
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".hexyn-aws")
-	if p.BaseDir() != want {
-		t.Fatalf("expected home baseDir %q, got %q", want, p.BaseDir())
-	}
+	assert.Equal(t, filepath.Join(home, ".hexyn-aws"), p.BaseDir(), "expected home baseDir")
 }
 
 func TestPathHelpers(t *testing.T) {
 	p := New(true) // baseDir == ".hexyn-aws"
 
-	cases := map[string]string{
-		p.CredentialsPath(): filepath.Join(".hexyn-aws", "credentials"),
-		p.InputDir():        filepath.Join(".hexyn-aws", "input"),
-		p.OutputDir():       filepath.Join(".hexyn-aws", "output"),
-	}
-	for got, want := range cases {
-		if got != want {
-			t.Errorf("path mismatch: got %q want %q", got, want)
-		}
-	}
+	assert.Equal(t, filepath.Join(".hexyn-aws", "credentials"), p.CredentialsPath())
+	assert.Equal(t, filepath.Join(".hexyn-aws", "input"), p.InputDir())
+	assert.Equal(t, filepath.Join(".hexyn-aws", "output"), p.OutputDir())
 }
 
 func TestEnsureDirectoriesCreatesTreeAndGitignore(t *testing.T) {
-	chdir(t, t.TempDir())
+	fixtures.Chdir(t, t.TempDir())
 	p := New(true)
 
-	if err := p.EnsureDirectories(); err != nil {
-		t.Fatalf("EnsureDirectories: %v", err)
-	}
+	require.NoError(t, p.EnsureDirectories())
 
 	for _, dir := range []string{p.InputDir(), p.OutputDir()} {
 		info, err := os.Stat(dir)
-		if err != nil || !info.IsDir() {
-			t.Errorf("expected directory %q to exist", dir)
-		}
+		require.NoErrorf(t, err, "expected directory %q to exist", dir)
+		assert.Truef(t, info.IsDir(), "expected %q to be a directory", dir)
 	}
 	gi := filepath.Join(p.BaseDir(), ".gitignore")
-	if _, err := os.Stat(gi); err != nil {
-		t.Errorf("expected .gitignore at %q: %v", gi, err)
-	}
-}
-
-// chdir switches to dir for the duration of the test and restores the original cwd.
-func chdir(t *testing.T, dir string) {
-	t.Helper()
-	orig, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(orig) })
+	_, err := os.Stat(gi)
+	assert.NoErrorf(t, err, "expected .gitignore at %q", gi)
 }

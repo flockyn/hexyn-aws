@@ -2,16 +2,14 @@ package tui
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestViewAlwaysRendersTitle(t *testing.T) {
-	if !strings.Contains(newTestModel(t).View(), "HEXYN AWS CLI") {
-		t.Error("expected the title in every view")
-	}
+	assert.Contains(t, newTestModel(t).View(), "HEXYN AWS CLI", "expected the title in every view")
 }
 
 func TestViewLoginPrompt(t *testing.T) {
@@ -19,9 +17,7 @@ func TestViewLoginPrompt(t *testing.T) {
 	m.state = stateLogin
 	m.setupLoginInputs()
 
-	if !strings.Contains(m.View(), "AWS Login Required") {
-		t.Error("login view should prompt for credentials")
-	}
+	assert.Contains(t, m.View(), "AWS Login Required", "login view should prompt for credentials")
 }
 
 func TestViewResultSuccessAndError(t *testing.T) {
@@ -29,15 +25,15 @@ func TestViewResultSuccessAndError(t *testing.T) {
 	m.state = stateResult
 
 	m.result = "exported 5 params"
-	if out := m.View(); !strings.Contains(out, "Success!") || !strings.Contains(out, "exported 5 params") {
-		t.Errorf("success view missing message: %q", out)
-	}
+	out := m.View()
+	assert.Contains(t, out, "Success!")
+	assert.Contains(t, out, "exported 5 params")
 
 	m.result = ""
 	m.err = errors.New("boom")
-	if out := m.View(); !strings.Contains(out, "Error:") || !strings.Contains(out, "boom") {
-		t.Errorf("error view missing error: %q", out)
-	}
+	out = m.View()
+	assert.Contains(t, out, "Error:")
+	assert.Contains(t, out, "boom")
 }
 
 func TestViewConfirmTaskDefMethodShowsSummary(t *testing.T) {
@@ -58,9 +54,7 @@ func TestViewConfirmTaskDefMethodShowsSummary(t *testing.T) {
 
 	out := mu.View()
 	for _, want := range []string{"Confirm details:", "GET", "prod", "prod-cluster", "nft-service-api", "From Task Definition", "Output Subdirectory Name"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("tdf confirmation missing %q in:\n%s", want, out)
-		}
+		assert.Containsf(t, out, want, "tdf confirmation missing %q", want)
 	}
 }
 
@@ -76,9 +70,7 @@ func TestViewConfirmPathMethodShowsSummaryAndInput(t *testing.T) {
 
 	out := m.View()
 	for _, want := range []string{"By Path Prefix", "preprod", "SSM Repo Name"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("path confirmation missing %q in:\n%s", want, out)
-		}
+		assert.Containsf(t, out, want, "path confirmation missing %q", want)
 	}
 }
 
@@ -88,8 +80,6 @@ func TestFooterMenuHints(t *testing.T) {
 
 	footer := m.footerView()
 	for _, want := range []string{"Quit", "Login", "Region", "Help"} {
-		if !strings.Contains(footer, want) {
-			t.Errorf("menu footer missing %q: %s", want, footer)
-		}
+		assert.Containsf(t, footer, want, "menu footer missing %q", want)
 	}
 }

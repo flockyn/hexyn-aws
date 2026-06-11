@@ -4,21 +4,18 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWriteRaw(t *testing.T) {
 	dir := t.TempDir()
 	raw := []byte(`[{"name":"X","valueFrom":"/a/b"}]`)
 
-	if err := (FS{}).WriteRaw(dir, "tdf-secrets.json", raw); err != nil {
-		t.Fatalf("WriteRaw: %v", err)
-	}
+	require.NoError(t, (FS{}).WriteRaw(dir, "tdf-secrets.json", raw))
 
 	got, err := os.ReadFile(filepath.Join(dir, "tdf-secrets.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != string(raw) {
-		t.Errorf("raw mismatch: got %q want %q", got, raw)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, string(raw), string(got))
 }

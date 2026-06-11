@@ -4,24 +4,19 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSetupLoginInputsMasksSecrets(t *testing.T) {
 	m := newTestModel(t)
 	m.setupLoginInputs()
 
-	if len(m.inputs) != 3 {
-		t.Fatalf("expected 3 login inputs, got %d", len(m.inputs))
-	}
-	if m.focusIndex != 0 {
-		t.Errorf("expected focus on first field, got %d", m.focusIndex)
-	}
-	if m.inputs[1].EchoMode != textinput.EchoPassword || m.inputs[2].EchoMode != textinput.EchoPassword {
-		t.Error("secret key and session token should be masked")
-	}
-	if m.inputs[0].EchoMode == textinput.EchoPassword {
-		t.Error("access key id should not be masked")
-	}
+	require.Len(t, m.inputs, 3)
+	assert.Equal(t, 0, m.focusIndex, "expected focus on first field")
+	assert.Equal(t, textinput.EchoPassword, m.inputs[1].EchoMode, "secret key should be masked")
+	assert.Equal(t, textinput.EchoPassword, m.inputs[2].EchoMode, "session token should be masked")
+	assert.NotEqual(t, textinput.EchoPassword, m.inputs[0].EchoMode, "access key id should not be masked")
 }
 
 func TestSetupInputsForPut(t *testing.T) {
@@ -31,15 +26,9 @@ func TestSetupInputsForPut(t *testing.T) {
 
 	m.setupInputs()
 
-	if len(m.inputs) != 2 {
-		t.Fatalf("expected 2 inputs for put, got %d", len(m.inputs))
-	}
-	if got := m.inputs[0].Value(); got != "orders" {
-		t.Errorf("repo name not cleaned: got %q want %q", got, "orders")
-	}
-	if got := m.inputs[1].Value(); got != "orders.env" {
-		t.Errorf("file name default wrong: got %q", got)
-	}
+	require.Len(t, m.inputs, 2)
+	assert.Equal(t, "orders", m.inputs[0].Value(), "repo name not cleaned")
+	assert.Equal(t, "orders.env", m.inputs[1].Value(), "file name default wrong")
 }
 
 func TestSetupInputsForGetPath(t *testing.T) {
@@ -51,15 +40,9 @@ func TestSetupInputsForGetPath(t *testing.T) {
 	m.setupInputs()
 
 	// get/path: SSM Repo Name + Output Subdirectory Name.
-	if len(m.inputs) != 2 {
-		t.Fatalf("expected 2 inputs for get/path, got %d", len(m.inputs))
-	}
-	if got := m.inputs[0].Value(); got != "users" {
-		t.Errorf("repo name not cleaned: got %q", got)
-	}
-	if got := m.inputs[len(m.inputs)-1].Placeholder; got != "Output Subdirectory Name" {
-		t.Errorf("last input should be the output dir, got %q", got)
-	}
+	require.Len(t, m.inputs, 2)
+	assert.Equal(t, "users", m.inputs[0].Value(), "repo name not cleaned")
+	assert.Equal(t, "Output Subdirectory Name", m.inputs[len(m.inputs)-1].Placeholder, "last input should be the output dir")
 }
 
 func TestSetupInputsForGetTaskDefHasOutputDir(t *testing.T) {
@@ -71,15 +54,9 @@ func TestSetupInputsForGetTaskDefHasOutputDir(t *testing.T) {
 	m.setupInputs()
 
 	// get/tdf: only the Output Subdirectory Name (the SSM path comes from the TDF).
-	if len(m.inputs) != 1 {
-		t.Fatalf("expected 1 input for get/tdf, got %d", len(m.inputs))
-	}
-	if got := m.inputs[0].Placeholder; got != "Output Subdirectory Name" {
-		t.Errorf("expected output dir input, got %q", got)
-	}
-	if got := m.inputs[0].Value(); got != "users" {
-		t.Errorf("output dir should default to cleaned service, got %q", got)
-	}
+	require.Len(t, m.inputs, 1)
+	assert.Equal(t, "Output Subdirectory Name", m.inputs[0].Placeholder, "expected output dir input")
+	assert.Equal(t, "users", m.inputs[0].Value(), "output dir should default to cleaned service")
 }
 
 func TestFocusNavigationCycles(t *testing.T) {
@@ -87,16 +64,10 @@ func TestFocusNavigationCycles(t *testing.T) {
 	m.setupLoginInputs() // 3 inputs, focus at 0
 
 	m.nextInput()
-	if m.focusIndex != 1 {
-		t.Errorf("next: expected 1, got %d", m.focusIndex)
-	}
+	assert.Equal(t, 1, m.focusIndex, "next")
 	m.nextInput()
 	m.nextInput() // wraps 2 -> 0
-	if m.focusIndex != 0 {
-		t.Errorf("next wrap: expected 0, got %d", m.focusIndex)
-	}
+	assert.Equal(t, 0, m.focusIndex, "next wrap")
 	m.prevInput() // wraps 0 -> 2
-	if m.focusIndex != 2 {
-		t.Errorf("prev wrap: expected 2, got %d", m.focusIndex)
-	}
+	assert.Equal(t, 2, m.focusIndex, "prev wrap")
 }
