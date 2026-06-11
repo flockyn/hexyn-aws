@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"os"
@@ -11,23 +11,19 @@ import (
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update hexyn-aws to the latest version",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		token := os.Getenv("GITHUB_TOKEN")
 		if token == "" {
 			color.Yellow("Note: GITHUB_TOKEN is not set. If the repository is private, the update might fail.")
 		}
 
-		source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{
-			APIToken: token,
-		})
+		source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{APIToken: token})
 		if err != nil {
 			color.Red("Error creating GitHub source: %v", err)
 			return
 		}
 
-		updater, err := selfupdate.NewUpdater(selfupdate.Config{
-			Source: source,
-		})
+		updater, err := selfupdate.NewUpdater(selfupdate.Config{Source: source})
 		if err != nil {
 			color.Red("Error creating updater: %v", err)
 			return
@@ -39,12 +35,10 @@ var updateCmd = &cobra.Command{
 			color.Red("Error detecting latest version: %v", err)
 			return
 		}
-
 		if !found {
 			color.Yellow("No releases found.")
 			return
 		}
-
 		if latest.LessOrEqual(Version) {
 			color.Green("Current version (%s) is up to date.", Version)
 			return
@@ -58,12 +52,10 @@ var updateCmd = &cobra.Command{
 			color.Red("Error getting executable path: %v", err)
 			return
 		}
-
 		if err := updater.UpdateTo(cmd.Context(), latest, exe); err != nil {
 			color.Red("Error updating to latest version: %v", err)
 			return
 		}
-
 		color.Green("Successfully updated to %s", latest.Version())
 	},
 }

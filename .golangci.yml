@@ -1,0 +1,23 @@
+version: "2"
+
+linters:
+  enable:
+    - revive
+    - funlen
+  settings:
+    revive:
+      rules:
+        - name: argument-limit
+          arguments: [3]
+        - name: function-result-limit
+          arguments: [3]
+    funlen:
+      lines: 80
+      statements: 50
+  exclusions:
+    rules:
+      # Test files may use longer table-driven funcs and more setup args.
+      - path: _test\.go
+        linters:
+          - funlen
+          - revive

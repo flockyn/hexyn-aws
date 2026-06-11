@@ -16,7 +16,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X hexyn-aws/cmd.Version={{.Version}}
+      - -s -w -X hexyn-aws/cmd/cli.Version={{.Version}}
 
 archives:
   - formats:

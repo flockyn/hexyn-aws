@@ -1,7 +1,7 @@
 package main
 
-import "hexyn-aws/cmd"
+import "hexyn-aws/cmd/cli"
 
 func main() {
-	cmd.Execute()
+	cli.Execute()
 }

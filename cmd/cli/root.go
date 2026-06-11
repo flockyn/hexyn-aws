@@ -1,9 +1,9 @@
-package cmd
+// Package cli wires the application's dependencies and exposes the cobra
+// command tree (root, ui, update).
+package cli
 
 import (
 	"os"
-
-	"hexyn-aws/internal/aws"
 
 	"github.com/spf13/cobra"
 )
@@ -11,7 +11,8 @@ import (
 var (
 	isLocal    bool
 	updateFlag bool
-	Version    = "dev"
+	// Version is overridden at build time via -ldflags.
+	Version = "dev"
 )
 
 var rootCmd = &cobra.Command{
@@ -19,9 +20,6 @@ var rootCmd = &cobra.Command{
 	Short:   "A production-ready AWS SSM Parameter Store management tool",
 	Long:    `Hexyn AWS is a high-performance CLI tool with an interactive TUI for managing AWS SSM Parameter Store and ECS configurations.`,
 	Version: Version,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		aws.SetBaseDir(isLocal)
-	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if updateFlag {
 			updateCmd.Run(cmd, args)
@@ -31,9 +29,9 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// Execute runs the root command.
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
