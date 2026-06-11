@@ -1,0 +1,18 @@
+all: true
+recursive: true
+dir: 'test/mocks/{{.SrcPackageName}}'
+filename: '{{.InterfaceName}}.go'
+pkgname: mocks
+structname: 'Mock{{.InterfaceName}}'
+force-file-write: true
+formatter: goimports
+generate: true
+include-auto-generated: false
+log-level: info
+template: testify
+packages:
+  # Auto-discover every interface under the module and centralize the mocks
+  # under test/mocks/<pkg>/, mirroring the source tree.
+  hexyn-aws:
+    config:
+      recursive: true
