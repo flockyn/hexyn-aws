@@ -1,16 +1,20 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="dark scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hexyn AWS — High-Performance AWS TUI</title>
+    <title>Hexyn AWS — A fast TUI for AWS SSM &amp; ECS secrets</title>
+    <meta name="description" content="Hexyn AWS is a fast, parallelized terminal UI for managing AWS SSM Parameter Store and ECS Task Definition secrets — with smart prefix grouping, sorted .env exports, and one-command installs.">
+    <meta property="og:title" content="Hexyn AWS — A fast TUI for AWS SSM & ECS secrets">
+    <meta property="og:description" content="Pull and push AWS SSM parameters and ECS Task Definition secrets from a polished terminal UI. Smart grouping, sorted .env files, multi-region.">
+    <meta property="og:type" content="website">
     <link rel="icon" type="image/svg+xml" href="logo.svg">
     <link rel="alternate icon" href="logo.svg">
-    <link rel="mask-icon" href="logo.svg" color="#000000">
+    <link rel="mask-icon" href="logo.svg" color="#5f5fd7">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -20,6 +24,17 @@
                         sans: ['Inter', 'sans-serif'],
                         mono: ['JetBrains Mono', 'monospace'],
                     },
+                    colors: {
+                        // Authentic ANSI palette mirrored from the TUI (styles.go)
+                        tui: {
+                            title: '#5f5fd7', // ANSI 62  — title chip / keys
+                            cream: '#ffffd7', // ANSI 230 — title text
+                            pink:  '#ff5faf', // ANSI 205 — focused labels
+                            green: '#5fff00', // ANSI 82  — success
+                            help:  '#8a8a8a', // ANSI 241 — help text
+                            dim:   '#585858', // ANSI 240 — source/path
+                        }
+                    }
                 }
             }
         }
@@ -27,132 +42,460 @@
     <style>
         body { background-color: #000; }
         .gradient-text {
-            background: linear-gradient(to right, #fff, #9ca3af);
+            background: linear-gradient(110deg, #fff 35%, #a5b4fc 65%, #c4b5fd 100%);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+        /* Ambient background: subtle grid + radial glow */
+        .bg-grid {
+            background-image:
+                linear-gradient(to right, rgba(255,255,255,0.035) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.035) 1px, transparent 1px);
+            background-size: 48px 48px;
+            -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+            mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+        }
+        .glow {
+            background: radial-gradient(ellipse 50% 45% at 50% 0%, rgba(99,102,241,0.22), transparent 70%);
+        }
+        .card-hover { transition: transform .2s ease, border-color .2s ease, background-color .2s ease; }
+        .card-hover:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.16); background-color: rgba(255,255,255,0.02); }
+        .term-shadow { box-shadow: 0 40px 120px -20px rgba(79,70,229,0.35), 0 0 0 1px rgba(255,255,255,0.06); }
+        .blink { animation: blink 1.1s step-end infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        /* Reveal on scroll */
+        .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s ease; }
+        .reveal.in { opacity: 1; transform: none; }
+        @media (prefers-reduced-motion: reduce) {
+            .reveal { opacity: 1; transform: none; transition: none; }
+            .blink { animation: none; }
         }
     </style>
 </head>
-<body class="text-gray-100 selection:bg-indigo-500/30 font-sans">
-    <div class="relative overflow-hidden pt-24 pb-32">
-        <div class="relative max-w-3xl mx-auto px-6">
-            <!-- Header -->
-            <header class="text-center mb-24">
-                <div class="flex justify-center mb-8">
-                    <img src="logo.svg" alt="Hexyn AWS Logo" class="w-20 h-20">
-                </div>
-                <div class="inline-flex items-center px-3 py-1 rounded-full bg-white/5 border border-white/10 text-gray-400 text-xs font-semibold mb-6 tracking-wide uppercase">
-                    Private Tool
-                </div>
-                <h1 class="text-6xl font-extrabold tracking-tighter mb-6 gradient-text">
-                    Hexyn AWS
-                </h1>
-                <p class="text-xl text-gray-400 leading-relaxed">
-                    A fast, parallelized TUI tool for managing AWS SSM Parameter Store and ECS Task Definitions.
-                </p>
-            </header>
+<body class="text-gray-100 selection:bg-indigo-500/30 font-sans antialiased">
 
-            <!-- Installation -->
-            <div class="mb-32">
-                <h2 class="text-sm font-bold uppercase tracking-widest text-gray-500 mb-8 text-center">Installation</h2>
-                <div class="space-y-6">
-                    <!-- Unix -->
-                    <div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
-                        <div class="flex items-center mb-4">
-                            <span class="text-sm font-bold text-gray-300">macOS / Linux</span>
-                        </div>
-                        <div class="flex items-center bg-black border border-white/5 rounded-xl p-4">
-                            <code id="cmd-unix" class="text-sm font-mono text-indigo-300 truncate mr-4">curl -fsSL https://flockyn.github.io/hexyn-aws/install.sh | bash</code>
-                            <button onclick="copy('cmd-unix', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">
-                                Copy
-                            </button>
-                        </div>
-                    </div>
-                    <!-- Windows -->
-                    <div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
-                        <div class="flex items-center mb-4">
-                            <span class="text-sm font-bold text-gray-300">Windows (PowerShell)</span>
-                        </div>
-                        <div class="flex items-center bg-black border border-white/5 rounded-xl p-4">
-                            <code id="cmd-win" class="text-sm font-mono text-indigo-300 truncate mr-4">iwr https://flockyn.github.io/hexyn-aws/install.ps1 | iex</code>
-                            <button onclick="copy('cmd-win', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">
-                                Copy
-                            </button>
-                        </div>
-                    </div>
-                    <p class="text-center text-sm text-gray-500 italic">
-                        Note: You will be prompted for a GitHub Personal Access Token (PAT) during installation.
-                    </p>
-                </div>
-            </div>
-
-            <!-- FAQ -->
-            <div class="mb-32">
-                <h2 class="text-sm font-bold uppercase tracking-widest text-gray-500 mb-12 text-center">Frequently Asked Questions</h2>
-                <div class="space-y-12">
-                    <div>
-                        <h3 class="text-lg font-bold text-white mb-3">Why do I need a GitHub Token?</h3>
-                        <p class="text-gray-400 leading-relaxed">
-                            Since Hexyn AWS is hosted in a private repository, the installer requires a Personal Access Token (PAT) with <code>read:packages</code> or <code>repo</code> scope to download the official binary releases.
-                        </p>
-                    </div>
-                    <div>
-                        <h3 class="text-lg font-bold text-white mb-3">Which operating systems are supported?</h3>
-                        <p class="text-gray-400 leading-relaxed">
-                            We provide native binaries for Linux (AMD64/ARM64), macOS (Intel/Apple Silicon), and Windows (AMD64). All installations are self-contained.
-                        </p>
-                    </div>
-                    <div>
-                        <h3 class="text-lg font-bold text-white mb-3">How do I update to the latest version?</h3>
-                        <p class="text-gray-400 leading-relaxed mb-4">
-                            You can update directly from the CLI by running:
-                        </p>
-                        <div class="flex items-center bg-black border border-white/5 rounded-xl p-4 mb-4">
-                            <code id="cmd-update" class="text-sm font-mono text-indigo-300 truncate mr-4">hexyn-aws update</code>
-                            <button onclick="copy('cmd-update', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">
-                                Copy
-                            </button>
-                        </div>
-                        <p class="text-gray-400 leading-relaxed">
-                            Alternatively, you can re-run the installation command above.
-                        </p>
-                    </div>
-                    <div>
-                        <h3 class="text-lg font-bold text-white mb-3">Is it secure to use my token in the script?</h3>
-                        <p class="text-gray-400 leading-relaxed">
-                            Yes. The script only uses your token to authenticate with the GitHub API for the download. Your token is never stored or sent to any third-party servers.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Footer -->
-            <footer class="pt-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8">
-                <div class="text-sm text-gray-600">
-                    &copy; 2026 Hexyn AWS.
-                </div>
-                <div class="flex space-x-8 text-sm text-gray-500">
-                    <a href="mailto:contact@flockyn.com" class="hover:text-white transition-colors font-medium">Support</a>
-                    <span class="text-gray-800">|</span>
-                    <span class="cursor-default">Private Repository</span>
-                </div>
-            </footer>
-        </div>
+    <!-- Ambient background -->
+    <div class="pointer-events-none fixed inset-0 -z-10">
+        <div class="absolute inset-0 bg-grid"></div>
+        <div class="absolute inset-x-0 top-0 h-[600px] glow"></div>
     </div>
+
+    <!-- Nav -->
+    <nav class="sticky top-0 z-50 backdrop-blur-md bg-black/50 border-b border-white/5">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <a href="#top" class="flex items-center gap-2.5 group">
+                    <img src="logo.svg" alt="Hexyn AWS" class="w-7 h-7">
+                    <span class="font-bold tracking-tight">Hexyn AWS</span>
+                </a>
+                <a href="#changelog" id="nav-version" class="hidden sm:inline-block text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-colors">Releases</a>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-sm text-gray-400">
+                <a href="#features" class="hover:text-white transition-colors">Features</a>
+                <a href="#how" class="hover:text-white transition-colors">How it works</a>
+                <a href="#changelog" class="hover:text-white transition-colors">Changelog</a>
+                <a href="#install" class="hover:text-white transition-colors">Install</a>
+                <a href="#faq" class="hover:text-white transition-colors">FAQ</a>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="https://github.com/flockyn/hexyn-aws" target="_blank" rel="noopener" aria-label="GitHub repository" class="text-gray-400 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.5 2.87 8.32 6.84 9.67.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.4 9.4 0 0 1 12 6.84c.85 0 1.71.12 2.51.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z"/></svg>
+                </a>
+                <a href="#install" class="text-sm font-semibold px-4 py-2 rounded-lg bg-white text-black hover:bg-gray-200 transition-colors">
+                    Get started
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main id="top" class="max-w-6xl mx-auto px-6">
+
+        <!-- Hero -->
+        <section class="pt-20 md:pt-28 pb-20 text-center">
+            <a href="#changelog" class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 hover:border-white/20 text-gray-400 text-xs font-semibold mb-7 tracking-wide transition-colors">
+                <span class="w-1.5 h-1.5 rounded-full bg-tui-green"></span>
+                <span id="hero-version">Latest release</span> · Linux · macOS · Windows
+            </a>
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tighter mb-6 gradient-text leading-[1.05]">
+                AWS secrets,<br class="hidden sm:block"> straight from your terminal.
+            </h1>
+            <p class="text-lg md:text-xl text-gray-400 leading-relaxed max-w-2xl mx-auto mb-10">
+                A fast, parallelized TUI for managing <span class="text-gray-200">SSM Parameter Store</span> and
+                <span class="text-gray-200">ECS Task Definitions</span>. Pull secrets into clean, grouped
+                <code class="text-indigo-300 font-mono">.env</code> files — or push them back — without leaving the keyboard.
+            </p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-4">
+                <button onclick="copy('cmd-hero', this)" class="group inline-flex items-center gap-3 px-5 py-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-white/20 transition-colors font-mono text-sm">
+                    <span class="text-tui-pink">$</span>
+                    <code id="cmd-hero">curl -fsSL https://flockyn.github.io/hexyn-aws/install.sh | bash</code>
+                    <span class="copy-label text-gray-600 group-hover:text-white transition-colors text-xs uppercase tracking-wider font-sans font-bold">Copy</span>
+                </button>
+                <a href="#install" class="px-5 py-3 rounded-xl text-sm font-semibold text-gray-300 hover:text-white transition-colors">
+                    Windows &amp; more →
+                </a>
+            </div>
+            <p class="text-xs text-gray-600">Self-updating · single binary · self-contained <code class="font-mono">.hexyn-aws/</code> directory</p>
+
+            <!-- Terminal mockup -->
+            <div class="reveal mt-16 max-w-3xl mx-auto text-left">
+                <div class="rounded-2xl overflow-hidden term-shadow bg-[#080808]">
+                    <!-- title bar -->
+                    <div class="flex items-center gap-2 px-4 py-3 bg-[#101012] border-b border-white/5">
+                        <span class="w-3 h-3 rounded-full bg-[#ff5f56]"></span>
+                        <span class="w-3 h-3 rounded-full bg-[#ffbd2e]"></span>
+                        <span class="w-3 h-3 rounded-full bg-[#27c93f]"></span>
+                        <span class="ml-3 text-xs text-gray-500 font-mono">hexyn-aws — 80×24</span>
+                    </div>
+                    <!-- screen -->
+                    <div class="p-6 font-mono text-[13px] leading-relaxed overflow-x-auto">
+                        <div class="mb-3"><span class="bg-tui-title text-tui-cream font-bold px-2 py-0.5 rounded-sm">HEXYN AWS CLI</span></div>
+                        <div class="text-gray-300"><span class="text-tui-pink">Account:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>acme-production</div>
+                        <div class="text-gray-300"><span class="text-tui-pink">Identity:&nbsp;&nbsp;&nbsp;&nbsp;</span>arn:aws:iam::123456789012:user/dev</div>
+                        <div class="text-gray-300"><span class="text-tui-pink">Region:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>[us-east-1]</div>
+                        <div class="text-tui-dim mb-4"><span class="text-tui-dim">Config Path:&nbsp;&nbsp;</span>~/.hexyn-aws/credentials</div>
+
+                        <div class="text-gray-500">Select Retrieval Method</div>
+                        <div class="text-tui-pink">› From Task Definition&nbsp;&nbsp;<span class="text-gray-600">recommended</span></div>
+                        <div class="text-gray-500 mb-4">&nbsp;&nbsp;By Path Prefix</div>
+
+                        <div class="text-tui-green font-bold mb-1">✓ Success!</div>
+                        <div class="text-gray-300 mb-2">Exported task-definition secrets to <span class="text-indigo-300">output/payments-api/</span></div>
+                        <div class="text-gray-400">&nbsp;&nbsp;├─ tdf-secrets.json</div>
+                        <div class="text-gray-400">&nbsp;&nbsp;├─ <span class="text-gray-200">global.env</span><span class="text-gray-600">&nbsp;&nbsp;# /production/global/*</span></div>
+                        <div class="text-gray-400 mb-4">&nbsp;&nbsp;└─ <span class="text-gray-200">payments-api.env</span><span class="text-gray-600">&nbsp;&nbsp;# /production/payments-api/*</span></div>
+
+                        <div class="text-gray-600">
+                            <span class="text-tui-title font-bold">Q</span> Quit&nbsp;•&nbsp;<span class="text-tui-title font-bold">ESC</span> Back&nbsp;•&nbsp;<span class="text-tui-title font-bold">/</span> Search&nbsp;•&nbsp;<span class="text-tui-title font-bold">ENTER</span> Menu<span class="blink text-tui-pink">▋</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Feature highlights strip -->
+        <section class="reveal grid grid-cols-2 md:grid-cols-4 gap-px bg-white/5 rounded-2xl overflow-hidden border border-white/5 mb-28">
+            <div class="bg-black p-6 text-center">
+                <div class="text-3xl font-extrabold tracking-tight">10×</div>
+                <div class="text-xs text-gray-500 mt-1">Parallel SSM writes</div>
+            </div>
+            <div class="bg-black p-6 text-center">
+                <div class="text-3xl font-extrabold tracking-tight">3</div>
+                <div class="text-xs text-gray-500 mt-1">OS · 5 arch targets</div>
+            </div>
+            <div class="bg-black p-6 text-center">
+                <div class="text-3xl font-extrabold tracking-tight">A→Z</div>
+                <div class="text-xs text-gray-500 mt-1">Sorted &amp; de-duped</div>
+            </div>
+            <div class="bg-black p-6 text-center">
+                <div class="text-3xl font-extrabold tracking-tight">1</div>
+                <div class="text-xs text-gray-500 mt-1">Self-contained binary</div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section id="features" class="scroll-mt-24 mb-28">
+            <div class="text-center mb-14 reveal">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-3">Features</h2>
+                <p class="text-3xl md:text-4xl font-extrabold tracking-tight">Everything you need to move secrets</p>
+            </div>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                <!-- Interactive TUI -->
+                <div class="reveal card-hover p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4 text-indigo-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
+                    </div>
+                    <h3 class="font-bold text-white mb-2">Interactive TUI</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">A polished Bubble Tea interface. Search lists, switch regions, and confirm actions — all from the keyboard.</p>
+                </div>
+
+                <!-- Task Definition Sync -->
+                <div class="reveal card-hover p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4 text-indigo-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
+                    </div>
+                    <h3 class="font-bold text-white mb-2">Task Definition sync</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Discover the exact secrets an ECS service uses and resolve every <code class="text-indigo-300">valueFrom</code> to a real value automatically.</p>
+                </div>
+
+                <!-- Smart Grouping -->
+                <div class="reveal card-hover p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4 text-indigo-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h10"/></svg>
+                    </div>
+                    <h3 class="font-bold text-white mb-2">Smart prefix grouping</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Secrets are split into separate <code class="text-indigo-300">.env</code> files by their SSM path — <code>global.env</code>, <code>service.env</code> — so shared and app config stay clean.</p>
+                </div>
+
+                <!-- Sorted & deduped -->
+                <div class="reveal card-hover p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4 text-indigo-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 6h11M3 12h7M3 18h5M18 8V4m0 0-2 2m2-2 2 2M18 16v4m0 0 2-2m-2 2-2-2"/></svg>
+                    </div>
+                    <h3 class="font-bold text-white mb-2">Sorted &amp; de-duplicated</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Every generated file is alphabetised and de-duped, with <code class="text-indigo-300">//secureString</code> markers preserved for safe round-trips.</p>
+                </div>
+
+                <!-- Multi-region & login -->
+                <div class="reveal card-hover p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4 text-indigo-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+                    </div>
+                    <h3 class="font-bold text-white mb-2">Multi-region &amp; login</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Auto-discover enabled regions and switch instantly. Handle temporary AWS tokens with the built-in login screen.</p>
+                </div>
+
+                <!-- Self-update -->
+                <div class="reveal card-hover p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4 text-indigo-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+                    </div>
+                    <h3 class="font-bold text-white mb-2">One-command updates</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Stay current with <code class="text-indigo-300">hexyn-aws update</code>. Native binaries for AMD64 &amp; ARM64 on every platform.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- How it works -->
+        <section id="how" class="scroll-mt-24 mb-28">
+            <div class="text-center mb-14 reveal">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-3">How it works</h2>
+                <p class="text-3xl md:text-4xl font-extrabold tracking-tight">From cluster to <code class="font-mono text-indigo-300">.env</code> in three steps</p>
+            </div>
+            <div class="grid md:grid-cols-3 gap-4">
+                <div class="reveal p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="text-tui-pink font-mono text-sm mb-3">01</div>
+                    <h3 class="font-bold text-white mb-2">Pick a service</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Choose a region, ECS cluster, and service from searchable, fully-paginated lists.</p>
+                </div>
+                <div class="reveal p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="text-tui-pink font-mono text-sm mb-3">02</div>
+                    <h3 class="font-bold text-white mb-2">Choose how to pull</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed"><span class="text-gray-200">From Task Definition</span> for the exact secrets a service runs with, or <span class="text-gray-200">By Path Prefix</span> for everything under a path.</p>
+                </div>
+                <div class="reveal p-6 rounded-2xl bg-[#0a0a0a] border border-white/10">
+                    <div class="text-tui-pink font-mono text-sm mb-3">03</div>
+                    <h3 class="font-bold text-white mb-2">Get grouped files</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Decide the output folder and receive sorted, prefix-grouped <code class="text-indigo-300">.env</code> files plus a raw <code>tdf-secrets.json</code>.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Installation -->
+        <section id="install" class="scroll-mt-24 mb-28">
+            <div class="text-center mb-14 reveal">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-3">Installation</h2>
+                <p class="text-3xl md:text-4xl font-extrabold tracking-tight">Up and running in seconds</p>
+            </div>
+            <div class="max-w-3xl mx-auto space-y-4 reveal">
+                <!-- Unix -->
+                <div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-sm font-bold text-gray-200">macOS / Linux</span>
+                        <span class="text-xs text-gray-600">bash</span>
+                    </div>
+                    <div class="flex items-center bg-black border border-white/5 rounded-xl p-4">
+                        <code id="cmd-unix" class="text-sm font-mono text-indigo-300 truncate mr-4">curl -fsSL https://flockyn.github.io/hexyn-aws/install.sh | bash</code>
+                        <button onclick="copy('cmd-unix', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">Copy</button>
+                    </div>
+                </div>
+                <!-- Windows -->
+                <div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-sm font-bold text-gray-200">Windows</span>
+                        <span class="text-xs text-gray-600">PowerShell</span>
+                    </div>
+                    <div class="flex items-center bg-black border border-white/5 rounded-xl p-4">
+                        <code id="cmd-win" class="text-sm font-mono text-indigo-300 truncate mr-4">iwr https://flockyn.github.io/hexyn-aws/install.ps1 | iex</code>
+                        <button onclick="copy('cmd-win', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">Copy</button>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3 p-4 rounded-xl bg-white/[0.03] border border-white/10">
+                    <svg class="w-5 h-5 text-indigo-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+                    <p class="text-sm text-gray-400 leading-relaxed">The installer downloads a single self-contained binary and sets up your <code class="text-indigo-300 font-mono">.hexyn-aws/</code> directory. Prefer manual installs? Grab a build from the <a href="https://github.com/flockyn/hexyn-aws/releases" target="_blank" rel="noopener" class="text-indigo-300 hover:text-white underline underline-offset-2">releases page</a>.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Changelog -->
+        <section id="changelog" class="scroll-mt-24 mb-28 max-w-3xl mx-auto">
+            <div class="text-center mb-14 reveal">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-3">Changelog</h2>
+                <p class="text-3xl md:text-4xl font-extrabold tracking-tight">What's new</p>
+                <p class="text-gray-500 mt-3 text-sm">Pulled live from the latest GitHub releases.</p>
+            </div>
+            <div id="changelog-list" class="space-y-4 reveal">
+                <div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl text-sm text-gray-500">Loading releases…</div>
+            </div>
+            <div class="text-center mt-8 reveal">
+                <a href="https://github.com/flockyn/hexyn-aws/releases" target="_blank" rel="noopener" class="text-sm font-semibold text-indigo-300 hover:text-white transition-colors">View all releases on GitHub →</a>
+            </div>
+        </section>
+
+        <!-- FAQ -->
+        <section id="faq" class="scroll-mt-24 mb-28 max-w-3xl mx-auto">
+            <div class="text-center mb-14 reveal">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-3">FAQ</h2>
+                <p class="text-3xl md:text-4xl font-extrabold tracking-tight">Questions, answered</p>
+            </div>
+            <div class="space-y-3 reveal">
+                <details class="group p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl" open>
+                    <summary class="flex items-center justify-between cursor-pointer font-bold text-white list-none">
+                        Which operating systems are supported?
+                        <span class="text-gray-500 group-open:rotate-45 transition-transform text-xl leading-none">+</span>
+                    </summary>
+                    <p class="text-gray-400 leading-relaxed mt-4">Native binaries for Linux (AMD64/ARM64), macOS (Intel/Apple Silicon), and Windows (AMD64). Every install is fully self-contained.</p>
+                </details>
+                <details class="group p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
+                    <summary class="flex items-center justify-between cursor-pointer font-bold text-white list-none">
+                        How do I update to the latest version?
+                        <span class="text-gray-500 group-open:rotate-45 transition-transform text-xl leading-none">+</span>
+                    </summary>
+                    <div class="mt-4">
+                        <p class="text-gray-400 leading-relaxed mb-4">Update directly from the CLI:</p>
+                        <div class="flex items-center bg-black border border-white/5 rounded-xl p-4">
+                            <code id="cmd-update" class="text-sm font-mono text-indigo-300 truncate mr-4">hexyn-aws update</code>
+                            <button onclick="copy('cmd-update', this)" class="ml-auto flex-shrink-0 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-white transition-colors">Copy</button>
+                        </div>
+                        <p class="text-gray-400 leading-relaxed mt-4">Or simply re-run the installation command above.</p>
+                    </div>
+                </details>
+                <details class="group p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
+                    <summary class="flex items-center justify-between cursor-pointer font-bold text-white list-none">
+                        Where are my files and credentials stored?
+                        <span class="text-gray-500 group-open:rotate-45 transition-transform text-xl leading-none">+</span>
+                    </summary>
+                    <p class="text-gray-400 leading-relaxed mt-4">Everything lives in a self-contained <code class="text-indigo-300">.hexyn-aws/</code> directory — credentials, plus <code>input/</code> and <code>output/</code> folders for the <code>.env</code> files you push and pull.</p>
+                </details>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/5">
+        <div class="max-w-6xl mx-auto px-6 py-12 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-2.5">
+                <img src="logo.svg" alt="Hexyn AWS" class="w-6 h-6 opacity-80">
+                <span class="text-sm text-gray-500">&copy; 2026 Hexyn AWS</span>
+            </div>
+            <div class="flex items-center gap-6 text-sm text-gray-500">
+                <a href="https://github.com/flockyn/hexyn-aws" target="_blank" rel="noopener" class="hover:text-white transition-colors font-medium">GitHub</a>
+                <span class="text-gray-800">·</span>
+                <a href="https://github.com/flockyn/hexyn-aws/releases" target="_blank" rel="noopener" class="hover:text-white transition-colors font-medium">Releases</a>
+                <span class="text-gray-800">·</span>
+                <a href="mailto:contact@flockyn.com" class="hover:text-white transition-colors font-medium">Support</a>
+            </div>
+        </div>
+    </footer>
 
     <script>
         function copy(id, btn) {
             const text = document.getElementById(id).innerText;
+            // Update only the label, never the whole button — otherwise rich
+            // buttons (e.g. the hero, which also holds the command + a <code id>)
+            // would have their children wiped out and the layout would break.
+            const label = btn.querySelector('.copy-label') || btn;
             navigator.clipboard.writeText(text).then(() => {
-                const original = btn.innerText;
-                btn.innerText = 'Copied!';
-                btn.classList.add('text-green-400');
+                if (label.dataset.busy) return;
+                const original = label.innerText;
+                label.dataset.busy = '1';
+                label.innerText = 'Copied!';
+                label.classList.add('text-green-400');
                 setTimeout(() => {
-                    btn.innerText = original;
-                    btn.classList.remove('text-green-400');
+                    label.innerText = original;
+                    label.classList.remove('text-green-400');
+                    delete label.dataset.busy;
                 }, 2000);
             });
         }
+        // Reveal-on-scroll
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+        }, { threshold: 0.12 });
+        document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+        // ---- Live version + changelog (public GitHub Releases API) ----
+        const REPO = 'flockyn/hexyn-aws';
+
+        function esc(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        // Minimal, safe markdown for release bodies (escaped first, then a few inline forms).
+        function mdInline(s) {
+            s = esc(s);
+            s = s.replace(/`([^`]+)`/g, '<code class="text-indigo-300 font-mono">$1</code>');
+            s = s.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-gray-200">$1</strong>');
+            s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-indigo-300 hover:text-white underline underline-offset-2">$1</a>');
+            return s;
+        }
+        function mdBody(body) {
+            if (!body || !body.trim()) return '<p class="text-gray-500 text-sm">No release notes.</p>';
+            const lines = body.replace(/\r/g, '').split('\n');
+            let html = '', inList = false;
+            const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+            for (const raw of lines) {
+                const line = raw.trim();
+                if (!line) { closeList(); continue; }
+                let m;
+                if ((m = line.match(/^#{1,6}\s+(.*)/))) {
+                    closeList();
+                    html += `<h4 class="text-xs font-bold uppercase tracking-widest text-gray-300 mt-4 mb-2">${mdInline(m[1])}</h4>`;
+                } else if ((m = line.match(/^[*\-]\s+(.*)/))) {
+                    if (!inList) { html += '<ul class="space-y-1.5 mb-2">'; inList = true; }
+                    html += `<li class="flex gap-2 text-sm text-gray-400"><span class="text-tui-pink mt-0.5">›</span><span>${mdInline(m[1])}</span></li>`;
+                } else {
+                    closeList();
+                    html += `<p class="text-sm text-gray-400 mb-2">${mdInline(line)}</p>`;
+                }
+            }
+            closeList();
+            return html;
+        }
+        function fmtDate(iso) {
+            try { return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+            catch (e) { return ''; }
+        }
+        function releaseCard(r) {
+            const tag = esc(r.tag_name || r.name || '');
+            const date = r.published_at ? fmtDate(r.published_at) : '';
+            const url = r.html_url || `https://github.com/${REPO}/releases`;
+            return `<div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <a href="${url}" target="_blank" rel="noopener" class="font-mono text-lg font-bold text-white hover:text-indigo-300 transition-colors">${tag}</a>
+                    <span class="text-xs text-gray-500">${date}</span>
+                </div>
+                ${mdBody(r.body)}
+            </div>`;
+        }
+        function setVersion(v) {
+            if (!v) return;
+            ['hero-version', 'nav-version'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = v;
+            });
+        }
+        async function loadChangelog() {
+            const list = document.getElementById('changelog-list');
+            try {
+                const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=10`, {
+                    headers: { 'Accept': 'application/vnd.github+json' }
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                if (!Array.isArray(data) || data.length === 0) throw new Error('no releases');
+                list.innerHTML = data.map(releaseCard).join('');
+                setVersion(data[0].tag_name);
+            } catch (e) {
+                // No hardcoded fallback: on failure (offline / rate-limited),
+                // just point to the releases page.
+                list.innerHTML = `<div class="p-6 bg-[#0a0a0a] border border-white/10 rounded-2xl text-center">
+                    <p class="text-sm text-gray-400 mb-4">Couldn't load releases right now.</p>
+                    <a href="https://github.com/${REPO}/releases" target="_blank" rel="noopener" class="text-sm font-semibold text-indigo-300 hover:text-white transition-colors">View releases on GitHub →</a>
+                </div>`;
+            }
+        }
+        loadChangelog();
     </script>
 </body>
 </html>
