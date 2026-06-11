@@ -28,7 +28,7 @@ curl -fsSL https://flockyn.github.io/hexyn-aws/install.sh | bash
 iwr https://flockyn.github.io/hexyn-aws/install.ps1 | iex
 ```
 
-> **Note:** Since this is a private tool, the installer will ask for your **GitHub Personal Access Token** to download the binary.
+> **Note:** No GitHub token is required — Hexyn AWS is a public repository. (If you hit GitHub's unauthenticated API rate limit, you can optionally set `GITHUB_TOKEN` before running the installer.)
 
 ## Updating
 
@@ -40,7 +40,7 @@ hexyn-aws update
 hexyn-aws --update
 ```
 
-> **Note:** Since the repository is private, you must have your `GITHUB_TOKEN` environment variable set for the update to work.
+> **Note:** The self-update pulls the latest public release — no token needed.
 
 ## Configuration Directory
 

@@ -14,6 +14,6 @@ This repository hosts the public landing page and installation scripts for **Hex
 - `install.sh`: Shell script for macOS/Linux installation.
 - `install.ps1`: PowerShell script for Windows installation.
 
-## Note on Privacy
+## Installation
 
-Hexyn AWS is a private tool. While the landing page and installers are public, downloading the tool itself requires a GitHub Personal Access Token (PAT) with appropriate permissions (`read:packages` or `repo`).
+Hexyn AWS is a public, open-source tool — no GitHub token is required to install or update it. The installers download the binary straight from the latest [public release](https://github.com/flockyn/hexyn-aws/releases).
