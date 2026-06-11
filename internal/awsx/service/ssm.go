@@ -18,8 +18,8 @@ import (
 
 const defaultPutConcurrency = 5
 
-// ssmAPI is the subset of the AWS SSM client used here (enables test mocking).
-type ssmAPI interface {
+// SSMAPI is the subset of the AWS SSM client used here (enables test mocking).
+type SSMAPI interface {
 	GetParametersByPath(ctx context.Context, params *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error)
 	GetParameters(ctx context.Context, params *ssm.GetParametersInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersOutput, error)
 	PutParameter(ctx context.Context, params *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
@@ -27,7 +27,7 @@ type ssmAPI interface {
 
 // SSM is a region-scoped client over AWS SSM Parameter Store.
 type SSM struct {
-	api         ssmAPI
+	api         SSMAPI
 	concurrency int
 }
 

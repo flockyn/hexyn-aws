@@ -10,11 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-// ec2API is the subset of the EC2 client used for region listing (enables test mocking).
-type ec2API interface {
-	DescribeRegions(ctx context.Context, params *ec2.DescribeRegionsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRegionsOutput, error)
-}
-
 // Sessions validates the active AWS session and lists regions, using STS, IAM,
 // EC2, and Organizations. (Named in the plural to avoid colliding with Session.)
 type Sessions struct {
@@ -66,19 +61,14 @@ func (s *Sessions) Check(ctx context.Context) (Session, error) {
 // ListEnabledRegions returns all enabled AWS regions, falling back to a common
 // list if the EC2 API call fails.
 func (s *Sessions) ListEnabledRegions(ctx context.Context) ([]string, error) {
-	cfg, err := BuildConfig(ctx, s.creds, "us-east-1")
+	cfg, err := BuildConfig(ctx, s.creds, "")
 	if err != nil {
 		return nil, err
 	}
-	return s.listRegions(ctx, ec2.NewFromConfig(cfg))
-}
-
-// listRegions queries the EC2 client for enabled regions, falling back to a
-// common list on error. The receiver is unused; it keeps the helper grouped on
-// Sessions while remaining testable with a fake ec2API.
-func (*Sessions) listRegions(ctx context.Context, client ec2API) ([]string, error) {
-	out, err := client.DescribeRegions(ctx, &ec2.DescribeRegionsInput{AllRegions: aws.Bool(false)})
+	out, err := ec2.NewFromConfig(cfg).DescribeRegions(ctx, &ec2.DescribeRegionsInput{AllRegions: aws.Bool(false)})
 	if err != nil {
+		// No region resolved from the credentials file (or the EC2 call failed):
+		// fall back to a common list so the region picker still has options.
 		return []string{"ap-southeast-3", "ap-southeast-1", "us-east-1", "us-west-2"}, nil
 	}
 	regions := make([]string, 0, len(out.Regions))

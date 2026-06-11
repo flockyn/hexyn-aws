@@ -12,8 +12,8 @@ import (
 	"hexyn-aws/internal/awsx"
 )
 
-// ecsAPI is the subset of the AWS ECS client used here (enables test mocking).
-type ecsAPI interface {
+// ECSAPI is the subset of the AWS ECS client used here (enables test mocking).
+type ECSAPI interface {
 	DescribeServices(ctx context.Context, params *ecs.DescribeServicesInput, optFns ...func(*ecs.Options)) (*ecs.DescribeServicesOutput, error)
 	DescribeTaskDefinition(ctx context.Context, params *ecs.DescribeTaskDefinitionInput, optFns ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
 	ListClusters(ctx context.Context, params *ecs.ListClustersInput, optFns ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
@@ -22,7 +22,7 @@ type ecsAPI interface {
 
 // ECS is a region-scoped client over AWS ECS.
 type ECS struct {
-	api ecsAPI
+	api ECSAPI
 }
 
 // NewECS builds an ECS client configured for the given region.
