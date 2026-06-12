@@ -2,6 +2,8 @@
 // data types those clients exchange with the rest of the application.
 package awsx
 
+import "strings"
+
 // ParameterType is a value object representing the SSM parameter type.
 type ParameterType string
 
@@ -67,4 +69,17 @@ type Service struct {
 type TaskSecret struct {
 	EnvVarName string // the KEY used in the .env file
 	SSMPath    string // the full SSM parameter ARN / path
+}
+
+// Path returns the bare SSM parameter path for the secret. ECS stores a secret's
+// source in either form — a full ARN
+// ("arn:aws:ssm:<region>:<account>:parameter/prod/api/KEY") or the bare path
+// ("/prod/api/KEY") — so the ARN prefix is stripped when present. The result
+// always begins with "/".
+func (t TaskSecret) Path() string {
+	const marker = ":parameter"
+	if i := strings.LastIndex(t.SSMPath, marker); i != -1 {
+		return t.SSMPath[i+len(marker):]
+	}
+	return t.SSMPath
 }

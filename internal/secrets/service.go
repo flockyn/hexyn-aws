@@ -18,15 +18,24 @@ type ParamTarget struct {
 	Env    string
 	Repo   string
 	Region string
+	// Cluster and Service identify the ECS service whose task definition a path
+	// export is diffed against (to surface repo env vars the TDF expects but the
+	// path did not return). They are unused by Push.
+	Cluster string
+	Service string
 }
 
 // TaskTarget addresses an ECS service in a region (PullByTaskDef) and names the
-// output subdirectory the resolved .env files are written into.
+// output subdirectory the resolved .env files are written into. Env and Repo name
+// the /<Env>/<Repo>/ prefix the export is reconciled against (Repo is derived from
+// the service name).
 type TaskTarget struct {
 	Region    string
 	Cluster   string
 	Service   string
 	OutputDir string
+	Env       string
+	Repo      string
 }
 
 // Deps bundles the Service's collaborators so New stays a single-argument constructor.
@@ -80,8 +89,13 @@ func (s *Service) ListServices(ctx context.Context, region, cluster string) ([]a
 	return ecsClient.ListServices(ctx, cluster)
 }
 
-// PullByPath fetches all parameters under /<Env>/<Repo>/ and writes them to
-// <OutputDir>/<subDir>/ps.env.
+// PullByPath fetches all parameters under /<Env>/<Repo>/, splits them into the
+// ones the task definition actually sources from this path (used) and the rest
+// (unused), and writes them under <OutputDir>/<subDir>/. Used params are grouped
+// by their sub-path segment into <group>.env files (root-level params go to
+// <Repo>.env). It always writes the per-repo trio even when empty: <Repo>.env,
+// <Repo>.unused.env (in SSM here but not sourced from this path by the TDF) and
+// <Repo>.missing.env (sourced from this path by the TDF but absent from SSM).
 func (s *Service) PullByPath(ctx context.Context, t ParamTarget, subDir string) error {
 	ssmClient, err := s.aws.SSM(ctx, t.Region)
 	if err != nil {
@@ -91,13 +105,118 @@ func (s *Service) PullByPath(ctx context.Context, t ParamTarget, subDir string) 
 	if err != nil {
 		return err
 	}
-	return s.env.Write(s.outputPath(subDir), "ps.env", params)
+
+	ecsClient, err := s.aws.ECS(ctx, t.Region)
+	if err != nil {
+		return err
+	}
+	taskSecrets, _, err := ecsClient.GetTaskSecrets(ctx, t.Cluster, t.Service)
+	if err != nil {
+		return err
+	}
+
+	used, unused, missing := s.compareWithTaskDef("/"+t.Env+"/"+t.Repo+"/", params, taskSecrets)
+
+	// Only the used params populate the grouped files; shadows (in SSM but sourced
+	// elsewhere by the TDF) and orphans land in <repo>.unused.env instead.
+	files := make(map[string][]awsx.Parameter)
+	for group, gParams := range s.groupByPathSegment(used, t.Repo) {
+		files[group+".env"] = gParams
+	}
+	// Guarantee the per-repo trio exists even when empty: <repo>.env holds the
+	// root-level params (left empty if there are none); the two reconciliation
+	// files are always written so each export yields a predictable, complete set.
+	if _, ok := files[t.Repo+".env"]; !ok {
+		files[t.Repo+".env"] = nil
+	}
+	files[t.Repo+".unused.env"] = unused
+	files[t.Repo+".missing.env"] = missing
+	return s.writeAll(s.outputPath(subDir), files)
+}
+
+// compareWithTaskDef reconciles the parameters found under prefix against a
+// service's task-definition secrets, returning three sets:
+//   - used: params the TDF sources directly from this prefix (valueFrom points at
+//     the param's exact path). These are the ones the service actually reads here.
+//   - unused: params present in SSM under the prefix that the TDF does not source
+//     from this path — orphans, and "shadows" whose env var the service sources
+//     from a different/shared prefix. A shadow whose key matches a TDF secret's
+//     source key is relabeled with that secret's env-var name (e.g. a repo
+//     "CACHE_URL" becomes "CACHE_HOST" when the TDF maps CACHE_HOST ← .../CACHE_URL),
+//     keeping its value.
+//   - missing: env vars the TDF sources from under this prefix but that are absent
+//     from Parameter Store (empty-valued). Secrets sourced from a different repo or
+//     a shared/global prefix are out of scope and skipped.
+//
+// The receiver is used only for the lastSegment helper; it keeps the comparison
+// grouped on Service.
+func (s *Service) compareWithTaskDef(prefix string, pathParams []awsx.Parameter, taskSecrets []awsx.TaskSecret) (used, unused, missing []awsx.Parameter) {
+	tdfPaths := make(map[string]bool, len(taskSecrets))
+	sourceKeyToName := make(map[string]string, len(taskSecrets))
+	for _, sec := range taskSecrets {
+		tdfPaths[sec.Path()] = true
+		sourceKeyToName[s.lastSegment(sec.Path())] = sec.EnvVarName
+	}
+
+	for _, p := range pathParams {
+		if tdfPaths[prefix+p.Name] { // the TDF sources this exact path → used here
+			used = append(used, p)
+			continue
+		}
+		entry := p
+		if name, ok := sourceKeyToName[s.lastSegment(p.Name)]; ok {
+			entry.Name = name // label by the env-var name the TDF exposes this key as
+		}
+		unused = append(unused, entry)
+	}
+
+	pathSet := make(map[string]bool, len(pathParams))
+	for _, p := range pathParams {
+		pathSet[prefix+p.Name] = true
+	}
+	seen := make(map[string]bool)
+	for _, sec := range taskSecrets {
+		ssmPath := sec.Path()
+		if !strings.HasPrefix(ssmPath, prefix) { // other repo / shared / global → ignore
+			continue
+		}
+		if pathSet[ssmPath] || seen[sec.EnvVarName] {
+			continue
+		}
+		seen[sec.EnvVarName] = true
+		missing = append(missing, awsx.Parameter{Name: sec.EnvVarName, Value: "", Type: awsx.ParameterTypeString})
+	}
+	return used, unused, missing
+}
+
+// lastSegment returns the final "/"-separated component of an SSM path tail, which
+// is the env-var key a path parameter maps to (e.g. "global/KEY" → "KEY"). The
+// receiver is unused; it keeps the helper grouped on Service.
+func (*Service) lastSegment(name string) string {
+	if i := strings.LastIndex(name, "/"); i != -1 {
+		return name[i+1:]
+	}
+	return name
+}
+
+// writeAll writes each named parameter set as a .env file. Empty sets produce
+// empty files, so callers can guarantee a file is always present.
+func (s *Service) writeAll(dir string, files map[string][]awsx.Parameter) error {
+	for name, params := range files {
+		if err := s.env.Write(dir, name, params); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // PullByTaskDef resolves an ECS service's task-definition secrets, writes the raw
 // mapping to tdf-secrets.json, resolves the SSM values (filling unresolved vars
 // with empty values so the .env is complete), then writes them grouped by their
 // SSM path prefix into separate <prefix>.env files — all under <OutputDir>/<sub>/.
+// It then reconciles the /<Env>/<Repo>/ path against the task definition, always
+// writing the per-repo trio <Repo>.env, <Repo>.unused.env and <Repo>.missing.env
+// — even when empty (see PullByPath / compareWithTaskDef).
 func (s *Service) PullByTaskDef(ctx context.Context, t TaskTarget) error {
 	ecsClient, err := s.aws.ECS(ctx, t.Region)
 	if err != nil {
@@ -128,12 +247,31 @@ func (s *Service) PullByTaskDef(ctx context.Context, t TaskTarget) error {
 	}
 	params = s.fillMissing(params, nameMap)
 
+	files := make(map[string][]awsx.Parameter)
 	for group, gParams := range s.groupByPrefix(params, nameMap, t.OutputDir) {
-		if err := s.env.Write(dir, group+".env", gParams); err != nil {
-			return err
-		}
+		files[group+".env"] = gParams
 	}
-	return nil
+
+	pathParams, err := ssmClient.GetByPath(ctx, awsx.ParamPath{Env: t.Env, Repo: t.Repo})
+	if err != nil {
+		return err
+	}
+	// Same per-repo trio as the path export, always present (see PullByPath). The
+	// grouped files here come from the resolved TDF secrets, so the "used" split is
+	// not needed — only the unused/missing reconciliation against the repo path.
+	if _, ok := files[t.Repo+".env"]; !ok {
+		files[t.Repo+".env"] = nil
+	}
+	_, unused, missing := s.compareWithTaskDef("/"+t.Env+"/"+t.Repo+"/", pathParams, secrets)
+	files[t.Repo+".unused.env"] = unused
+	files[t.Repo+".missing.env"] = missing
+	return s.writeAll(dir, files)
+}
+
+// PreviewPush parses the input .env file without uploading anything, so the
+// caller can show the user exactly what Push would upload before confirming.
+func (s *Service) PreviewPush(fileName string) ([]awsx.Parameter, error) {
+	return s.env.Parse(filepath.Join(s.cfg.InputDir(), fileName))
 }
 
 // Push parses an input .env file and uploads its parameters to /<Env>/<Repo>/.
@@ -177,6 +315,24 @@ func (*Service) groupByPrefix(params []awsx.Parameter, nameMap map[string]string
 			group = parts[len(parts)-2]
 		}
 		groups[group] = append(groups[group], p)
+	}
+	return groups
+}
+
+// groupByPathSegment buckets path-prefixed parameters (whose Name is the SSM
+// path tail, e.g. "global/KEY") into output files keyed by the segment directly
+// above the key (so /env/repo/global/KEY → group "global", key "KEY"). Keys with
+// no nested segment fall back to the given repo name. The receiver is unused; it
+// keeps the helper grouped on Service.
+func (*Service) groupByPathSegment(params []awsx.Parameter, fallback string) map[string][]awsx.Parameter {
+	groups := make(map[string][]awsx.Parameter)
+	for _, p := range params {
+		group, name := fallback, p.Name
+		if parts := strings.Split(p.Name, "/"); len(parts) > 1 {
+			group = parts[len(parts)-2]
+			name = parts[len(parts)-1]
+		}
+		groups[group] = append(groups[group], awsx.Parameter{Name: name, Value: p.Value, Type: p.Type})
 	}
 	return groups
 }
