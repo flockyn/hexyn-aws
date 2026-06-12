@@ -20,9 +20,10 @@ func TestSetupLoginInputsMasksSecrets(t *testing.T) {
 }
 
 func TestSetupInputsForPut(t *testing.T) {
+	t.Setenv("HEXYN_REPO_PREFIXES", "service-") // exercise repo-name cleaning
 	m := newTestModel(t)
 	m.action = "put"
-	m.service = "nft-service-orders" // exercises the repo-name cleaning
+	m.service = "service-orders"
 
 	m.setupInputs()
 
@@ -32,6 +33,7 @@ func TestSetupInputsForPut(t *testing.T) {
 }
 
 func TestSetupInputsForGetPath(t *testing.T) {
+	t.Setenv("HEXYN_REPO_PREFIXES", "service-")
 	m := newTestModel(t)
 	m.action = "get"
 	m.method = "path"
@@ -46,6 +48,7 @@ func TestSetupInputsForGetPath(t *testing.T) {
 }
 
 func TestSetupInputsForGetTaskDefHasOutputDir(t *testing.T) {
+	t.Setenv("HEXYN_REPO_PREFIXES", "service-")
 	m := newTestModel(t)
 	m.action = "get"
 	m.method = "tdf"

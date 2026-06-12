@@ -5,11 +5,26 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestViewAlwaysRendersTitle(t *testing.T) {
 	assert.Contains(t, newTestModel(t).View(), "HEXYN AWS CLI", "expected the title in every view")
+}
+
+func TestViewShowsVersionNextToBrand(t *testing.T) {
+	assert.Contains(t, newTestModel(t).View(), "v-test", "expected the version shown next to the brand label")
+}
+
+func TestViewPinsFooterToBottom(t *testing.T) {
+	m := newTestModel(t)
+	m.state = stateMenu
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	out := updated.(Model).View()
+
+	assert.Equal(t, 24, lipgloss.Height(out), "view should fill the screen height so the footer sits at the bottom")
 }
 
 func TestViewLoginPrompt(t *testing.T) {
@@ -42,8 +57,8 @@ func TestViewConfirmTaskDefMethodShowsSummary(t *testing.T) {
 	m.action = "get"
 	m.env = "prod"
 	m.cluster = "prod-cluster"
-	m.service = "nft-service-api"
-	m.selector.SetItems([]list.Item{item{title: "nft-service-api"}})
+	m.service = "service-api"
+	m.selector.SetItems([]list.Item{item{title: "service-api"}})
 	m.selector.Select(0)
 
 	updated, _ := m.selectCurrent()
@@ -53,7 +68,7 @@ func TestViewConfirmTaskDefMethodShowsSummary(t *testing.T) {
 	mu.state = stateInputs
 
 	out := mu.View()
-	for _, want := range []string{"Confirm details:", "GET", "prod", "prod-cluster", "nft-service-api", "From Task Definition", "Output Subdirectory Name"} {
+	for _, want := range []string{"Confirm details:", "GET", "prod", "prod-cluster", "service-api", "From Task Definition", "Output Subdirectory Name"} {
 		assert.Containsf(t, out, want, "tdf confirmation missing %q", want)
 	}
 }

@@ -22,16 +22,23 @@ func (m *Model) setupLoginInputs() {
 	m.inputs[0].Focus()
 }
 
+// cleanRepoName derives a likely SSM repo name from an ECS service name by
+// stripping the configured deployment prefixes (see config.RepoNamePrefixes).
+func (m Model) cleanRepoName(service string) string {
+	repo := service
+	for _, prefix := range m.cfg.RepoNamePrefixes() {
+		repo = strings.TrimPrefix(repo, prefix)
+	}
+	return repo
+}
+
 // setupInputs builds the action-specific input fields, pre-filling a cleaned
 // repo name derived from the selected service.
 func (m *Model) setupInputs() {
 	m.inputs = nil
 	m.focusIndex = 0
 
-	cleanRepo := m.service
-	cleanRepo = strings.TrimPrefix(cleanRepo, "service-")
-	cleanRepo = strings.TrimPrefix(cleanRepo, "nft-service-")
-	cleanRepo = strings.TrimPrefix(cleanRepo, "nft-")
+	cleanRepo := m.cleanRepoName(m.service)
 
 	switch m.action {
 	case "get":
@@ -46,6 +53,16 @@ func (m *Model) setupInputs() {
 	if len(m.inputs) > 0 {
 		m.inputs[0].Focus()
 	}
+}
+
+// setupConfigInput builds the settings screen's single field, pre-filled with the
+// current repo-name prefixes (space-separated).
+func (m *Model) setupConfigInput() {
+	m.inputs = []textinput.Model{
+		m.createInput("Repo Prefixes (space-separated, most specific first)", strings.Join(m.cfg.RepoNamePrefixes(), " ")),
+	}
+	m.focusIndex = 0
+	m.inputs[0].Focus()
 }
 
 // createInput builds a text input field. The receiver is unused; it keeps the

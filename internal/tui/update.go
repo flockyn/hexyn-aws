@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	"hexyn-aws/internal/awsx"
 	"hexyn-aws/internal/secrets"
 
@@ -21,7 +23,7 @@ func (m Model) isSelectorState() bool {
 // handleGlobalKey processes keys available across most states. It returns
 // handled=false when the key should fall through to the per-state handler.
 func (m Model) handleGlobalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
-	if m.state == stateInputs || m.state == stateLogin {
+	if m.state == stateInputs || m.state == stateLogin || m.state == stateConfig {
 		// While typing, only ESC is treated as a shortcut (it can't be typed into
 		// a field); every other key falls through to the input handler.
 		if msg.String() == "esc" {
@@ -52,6 +54,12 @@ func (m Model) handleGlobalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	case "h":
 		m.showHelp()
 		return true, m, nil
+	case "s":
+		if m.settingsAvailable() {
+			m.setupConfigInput()
+			m.state = stateConfig
+			return true, m, nil
+		}
 	case "esc":
 		return m.handleEsc()
 	case "r":
@@ -61,6 +69,18 @@ func (m Model) handleGlobalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		}
 	}
 	return false, m, nil
+}
+
+// settingsAvailable reports whether the global Settings shortcut applies: it is
+// offered on the stable interactive screens, but not while typing into a field, on
+// the settings screen itself, or during a transient (spinner) state.
+func (m Model) settingsAvailable() bool {
+	switch m.state {
+	case stateInputs, stateLogin, stateConfig, stateCheckingSession, stateLoading, stateExecuting:
+		return false
+	default:
+		return true
+	}
 }
 
 // handleEsc implements the context-sensitive escape behaviour.
@@ -118,6 +138,19 @@ func (m Model) handleListMsg(msg listMsg) (tea.Model, tea.Cmd) {
 	m.selector.Title = m.selectionTitle()
 	m.selector.Select(0)
 	m.selector.ResetFilter()
+	return m, nil
+}
+
+// handlePreviewMsg routes the parsed PUT input either to the confirmation screen
+// or, if parsing failed, to the result screen surfacing the error.
+func (m Model) handlePreviewMsg(msg previewMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.state = stateResult
+		m.err = msg.err
+		return m, nil
+	}
+	m.previewParams = msg.params
+	m.state = stateConfirmPut
 	return m, nil
 }
 
@@ -265,6 +298,25 @@ func (m Model) selectCurrent() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// updateConfig handles the settings screen: ENTER persists the repo prefixes to
+// the config file and reports the result; other keys edit the field.
+func (m Model) updateConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
+		prefixes := strings.Fields(m.inputs[0].Value())
+		if err := m.cfg.SetRepoPrefixes(prefixes); err != nil {
+			m.state = stateResult
+			m.err = err
+			return m, nil
+		}
+		m.state = stateResult
+		m.err = nil
+		m.result = "Saved repo prefixes to " + m.cfg.ConfigPath() + "\n\n" +
+			"Active prefixes: " + strings.Join(m.cfg.RepoNamePrefixes(), " ")
+		return m, nil
+	}
+	return m, m.updateInputFields(msg)
+}
+
 func (m Model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if len(m.inputs) == 0 && m.state == stateInputs {
 		m.state = stateExecuting
@@ -275,8 +327,7 @@ func (m Model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch key.String() {
 		case "enter":
 			if m.focusIndex == len(m.inputs)-1 {
-				m.state = stateExecuting
-				return m, m.executeAction()
+				return m.submitInputs()
 			}
 			m.nextInput()
 		case "up", "shift+tab":
@@ -286,6 +337,18 @@ func (m Model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, m.updateInputFields(msg)
+}
+
+// submitInputs advances past the input screen once the final field is confirmed.
+// PUT first parses the chosen file so the user can review it on the confirmation
+// screen; every other action executes directly.
+func (m Model) submitInputs() (tea.Model, tea.Cmd) {
+	if m.action == "put" {
+		m.state = stateLoading
+		return m, m.cmds.previewPut(m.inputs[1].Value())
+	}
+	m.state = stateExecuting
+	return m, m.executeAction()
 }
 
 // updateInputFields forwards a message to every text input and batches their commands.
@@ -304,10 +367,12 @@ func (m Model) executeAction() tea.Cmd {
 		if m.method == "tdf" {
 			return m.cmds.getByTaskDef(secrets.TaskTarget{
 				Region: m.session.Region, Cluster: m.cluster, Service: m.service, OutputDir: outDir,
+				Env: m.env, Repo: m.cleanRepoName(m.service),
 			})
 		}
 		return m.cmds.getByPath(secrets.ParamTarget{
 			Env: m.env, Repo: m.inputs[0].Value(), Region: m.session.Region,
+			Cluster: m.cluster, Service: m.service,
 		}, outDir)
 	case "put":
 		target := secrets.ParamTarget{Env: m.env, Repo: m.inputs[0].Value(), Region: m.session.Region}

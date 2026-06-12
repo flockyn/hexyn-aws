@@ -13,6 +13,8 @@ const (
 	stateSelectService
 	stateSelectMethod
 	stateInputs
+	stateConfirmPut
+	stateConfig
 	stateExecuting
 	stateResult
 )

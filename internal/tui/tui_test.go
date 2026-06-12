@@ -12,7 +12,7 @@ import (
 // transition and view tests that never reach a service call.
 func newTestModel(t *testing.T) Model {
 	t.Helper()
-	return NewModel(nil, config.New(true)) // svc unused by the transitions under test
+	return NewModel(nil, config.New(true), "v-test") // svc unused by the transitions under test
 }
 
 // runnerWith builds a commandRunner over a real Service, defaulting any

@@ -25,9 +25,10 @@ func (i item) FilterValue() string { return i.title + " " + i.desc }
 
 // Model is the Bubble Tea model holding all TUI state.
 type Model struct {
-	cfg   *config.Provider
-	cmds  *commandRunner
-	state state
+	cfg     *config.Provider
+	cmds    *commandRunner
+	state   state
+	version string
 
 	session awsx.Session
 
@@ -36,21 +37,23 @@ type Model struct {
 	spinner  spinner.Model
 	inputs   []textinput.Model
 
-	focusIndex int
-	action     string
-	method     string
-	env        string
-	cluster    string
-	service    string
-	result     string
-	err        error
+	focusIndex    int
+	action        string
+	method        string
+	env           string
+	cluster       string
+	service       string
+	result        string
+	previewParams []awsx.Parameter
+	err           error
 
 	width  int
 	height int
 }
 
-// NewModel builds the initial TUI model wired to the given service and config.
-func NewModel(svc *secrets.Service, cfg *config.Provider) Model {
+// NewModel builds the initial TUI model wired to the given service, config, and
+// app version (shown next to the brand label).
+func NewModel(svc *secrets.Service, cfg *config.Provider, version string) Model {
 	mItems := []list.Item{
 		item{title: "Get Parameters", desc: "Retrieve SSM parameters to .env", action: "get"},
 		item{title: "Put Parameters", desc: "Upload .env to SSM", action: "put"},
@@ -75,6 +78,7 @@ func NewModel(svc *secrets.Service, cfg *config.Provider) Model {
 
 	return Model{
 		cfg:      cfg,
+		version:  version,
 		cmds:     &commandRunner{svc: svc},
 		state:    stateCheckingSession,
 		mainMenu: mm,
@@ -115,6 +119,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case resultMsg:
 		return m.handleResultMsg(msg)
+
+	case previewMsg:
+		return m.handlePreviewMsg(msg)
 	}
 
 	return m.updateForState(msg)
@@ -135,6 +142,13 @@ func (m Model) updateForState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSelector(msg)
 	case stateInputs:
 		return m.updateInputs(msg)
+	case stateConfig:
+		return m.updateConfig(msg)
+	case stateConfirmPut:
+		if msg, ok := msg.(tea.KeyMsg); ok && msg.String() == "enter" {
+			m.state = stateExecuting
+			return m, m.executeAction()
+		}
 	case stateResult:
 		if msg, ok := msg.(tea.KeyMsg); ok && msg.String() == "enter" {
 			m.state = stateMenu

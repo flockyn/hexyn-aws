@@ -30,7 +30,7 @@ func runTUI() error {
 
 	svc := bootstrap.NewService(cfg)
 
-	_, err := tea.NewProgram(tui.NewModel(svc, cfg), tea.WithAltScreen()).Run()
+	_, err := tea.NewProgram(tui.NewModel(svc, cfg, Version), tea.WithAltScreen()).Run()
 	return err
 }
 

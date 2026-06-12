@@ -117,6 +117,13 @@ func (c *commandRunner) getByTaskDef(t secrets.TaskTarget) tea.Cmd {
 	}
 }
 
+func (c *commandRunner) previewPut(fileName string) tea.Cmd {
+	return func() tea.Msg {
+		params, err := c.svc.PreviewPush(fileName)
+		return previewMsg{params: params, err: err}
+	}
+}
+
 func (c *commandRunner) putParameters(t secrets.ParamTarget, fileName string) tea.Cmd {
 	return func() tea.Msg {
 		success, errs := c.svc.Push(context.Background(), t, fileName)

@@ -56,16 +56,30 @@ func TestUpdateRegionCommandConfirms(t *testing.T) {
 	assert.Equal(t, "Region updated to ap-southeast-3", got.message)
 }
 
+func TestPreviewPutCommandEmitsParams(t *testing.T) {
+	env := mocks.NewMockEnvFiles(t)
+	env.EXPECT().Parse(mock.Anything).Return([]awsx.Parameter{{Name: "A"}, {Name: "B"}}, nil)
+	cr := runnerWith(t, secrets.Deps{Env: env})
+
+	got, ok := cr.previewPut("in.env")().(previewMsg)
+	require.True(t, ok, "expected previewMsg")
+	require.NoError(t, got.err)
+	assert.Len(t, got.params, 2)
+}
+
 func TestGetByPathCommandReportsSuccess(t *testing.T) {
 	ssm := mocks.NewMockSSMClient(t)
 	ssm.EXPECT().GetByPath(mock.Anything, mock.Anything).Return([]awsx.Parameter{{Name: "X"}}, nil)
+	ecs := mocks.NewMockECSClient(t)
+	ecs.EXPECT().GetTaskSecrets(mock.Anything, mock.Anything, mock.Anything).Return(nil, []byte("[]"), nil)
 	aws := mocks.NewMockAWS(t)
 	aws.EXPECT().SSM(mock.Anything, "ap-southeast-3").Return(ssm, nil)
+	aws.EXPECT().ECS(mock.Anything, "ap-southeast-3").Return(ecs, nil)
 	env := mocks.NewMockEnvFiles(t)
 	env.EXPECT().Write(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	cr := runnerWith(t, secrets.Deps{AWS: aws, Env: env})
 
-	target := secrets.ParamTarget{Env: "prod", Repo: "api", Region: "ap-southeast-3"}
+	target := secrets.ParamTarget{Env: "prod", Repo: "api", Region: "ap-southeast-3", Cluster: "c", Service: "api"}
 	got := cr.getByPath(target, "api")().(resultMsg)
 	require.NoError(t, got.err)
 	assert.Contains(t, got.message, "Successfully exported")

@@ -2,24 +2,36 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
 	"hexyn-aws/internal/awsx"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
-// View renders the full screen for the current state.
+// View renders the full screen, keeping the footer pinned to the bottom.
 func (m Model) View() string {
 	var s strings.Builder
 
-	s.WriteString(titleStyle.Render("HEXYN AWS CLI"))
-	s.WriteString("\n")
+	brand := titleStyle.MarginBottom(0).Render("HEXYN AWS CLI")
+	if m.version != "" {
+		brand += " " + sourceStyle.Render(m.version)
+	}
+	s.WriteString(brand)
+	s.WriteString("\n\n")
 	m.writeSessionHeader(&s)
 	m.writeBody(&s)
 
-	s.WriteString("\n\n")
-	s.WriteString(m.footerView())
-	return s.String()
+	content := s.String()
+	footer := m.footerView()
+	if m.height == 0 { // size unknown yet (no WindowSizeMsg) — fall back to flow layout
+		return content + "\n\n" + footer
+	}
+	// Pad so the footer sits on the last row(s); +1 turns the row gap into newlines.
+	gap := max(m.height-lipgloss.Height(content)-lipgloss.Height(footer)+1, 2)
+	return content + strings.Repeat("\n", gap) + footer
 }
 
 // writeSessionHeader renders the account / identity / region / config-path block.
@@ -65,6 +77,10 @@ func (m Model) writeBody(s *strings.Builder) {
 		s.WriteString(" Fetching from AWS...")
 	case stateInputs:
 		m.writeInputs(s)
+	case stateConfig:
+		m.writeConfig(s)
+	case stateConfirmPut:
+		m.writeConfirmPut(s)
 	case stateExecuting:
 		s.WriteString(m.spinner.View())
 		s.WriteString(" Executing ")
@@ -86,6 +102,18 @@ func (m Model) writeLogin(s *strings.Builder) {
 		s.WriteString(errorStyle.Render("Error: " + m.err.Error()))
 		s.WriteString("\n\n")
 	}
+	m.writeInputFields(s)
+}
+
+// writeConfig renders the settings screen: the editable repo-prefix field plus
+// where it persists.
+func (m Model) writeConfig(s *strings.Builder) {
+	s.WriteString(focusedStyle.Render("Settings"))
+	s.WriteString("\n\n")
+	s.WriteString(helpStyle.Render("Service-name prefixes stripped to derive the SSM repo name."))
+	s.WriteString("\n")
+	s.WriteString(helpStyle.Render("Saved to " + m.cfg.ConfigPath() + " (the HEXYN_REPO_PREFIXES env var overrides it)."))
+	s.WriteString("\n\n")
 	m.writeInputFields(s)
 }
 
@@ -141,6 +169,58 @@ func (m Model) writeInputFields(s *strings.Builder) {
 	}
 }
 
+// confirmValueWidth caps how much of each value is shown in the confirmation
+// table, keeping long secrets/certs from blowing out the layout.
+const confirmValueWidth = 50
+
+// writeConfirmPut renders the pre-upload review: the operation summary, the
+// destination path, and an ENV/VALUE table of every parameter that will be sent.
+func (m Model) writeConfirmPut(s *strings.Builder) {
+	s.WriteString(focusedStyle.Render("Confirm upload — review parameters:"))
+	s.WriteString("\n\n")
+	m.writeSummary(s)
+	s.WriteString(focusedStyle.Render("Destination:  "))
+	fmt.Fprintf(s, "/%s/%s/", m.env, m.inputs[0].Value())
+	s.WriteString("\n\n")
+
+	if len(m.previewParams) == 0 {
+		s.WriteString(errorStyle.Render("No parameters found in the selected file."))
+		s.WriteString("\n")
+		return
+	}
+
+	nameWidth := len("ENV")
+	for _, p := range m.previewParams {
+		if len(p.Name) > nameWidth {
+			nameWidth = len(p.Name)
+		}
+	}
+
+	s.WriteString(focusedStyle.Render(fmt.Sprintf("%-*s  %s", nameWidth, "ENV", "VALUE")))
+	s.WriteString("\n")
+	for _, p := range m.previewParams {
+		value := m.truncateValue(p.Value)
+		if p.IsSecure() {
+			value += helpStyle.Render(" //secureString")
+		}
+		fmt.Fprintf(s, "%-*s  %s\n", nameWidth, p.Name, value)
+	}
+	s.WriteString("\n")
+	s.WriteString(helpStyle.Render(fmt.Sprintf("%d parameter(s) will be uploaded. Press ENTER to confirm, ESC to go back.", len(m.previewParams))))
+	s.WriteString("\n")
+}
+
+// truncateValue collapses newlines and trims an overlong value for table display.
+// The full value is still uploaded; only the on-screen preview is shortened. The
+// receiver is unused; it keeps the helper grouped on Model.
+func (Model) truncateValue(v string) string {
+	v = strings.ReplaceAll(v, "\n", "\\n")
+	if len(v) > confirmValueWidth {
+		return v[:confirmValueWidth] + "…"
+	}
+	return v
+}
+
 func (m Model) writeResult(s *strings.Builder) {
 	if m.err != nil {
 		s.WriteString(errorStyle.Render("Error: " + m.err.Error()))
@@ -168,8 +248,15 @@ func (m Model) footerView() string {
 		if len(m.inputs) > 1 {
 			items = append(items, keyStyle.Render("TAB")+" Move")
 		}
+	case stateConfig:
+		items = append(items, keyStyle.Render("ESC")+" Back", keyStyle.Render("ENTER")+" Save")
+	case stateConfirmPut:
+		items = append(items, keyStyle.Render("ESC")+" Back", keyStyle.Render("ENTER")+" Confirm Upload")
 	case stateResult:
 		items = append(items, keyStyle.Render("ENTER")+" Menu")
+	}
+	if m.settingsAvailable() { // global shortcut, shown on every interactive screen
+		items = append(items, keyStyle.Render("S")+" Settings")
 	}
 	return strings.Join(items, " • ")
 }
