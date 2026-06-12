@@ -169,12 +169,14 @@ func (m Model) writeInputFields(s *strings.Builder) {
 	}
 }
 
-// confirmValueWidth caps how much of each value is shown in the confirmation
-// table, keeping long secrets/certs from blowing out the layout.
-const confirmValueWidth = 50
+// confirmValueWidth is the fallback wrap width for the confirmation table's value
+// column when the terminal width is not yet known.
+const confirmValueWidth = 60
 
 // writeConfirmPut renders the pre-upload review: the operation summary, the
 // destination path, and an ENV/VALUE table of every parameter that will be sent.
+// Long values wrap onto continuation lines aligned under the VALUE column instead
+// of being truncated, so the full value is reviewable.
 func (m Model) writeConfirmPut(s *strings.Builder) {
 	s.WriteString(focusedStyle.Render("Confirm upload — review parameters:"))
 	s.WriteString("\n\n")
@@ -195,30 +197,45 @@ func (m Model) writeConfirmPut(s *strings.Builder) {
 			nameWidth = len(p.Name)
 		}
 	}
+	valueWidth := confirmValueWidth
+	if m.width > 0 {
+		valueWidth = max(m.width-nameWidth-2, 20)
+	}
+	indent := strings.Repeat(" ", nameWidth+2)
 
 	s.WriteString(focusedStyle.Render(fmt.Sprintf("%-*s  %s", nameWidth, "ENV", "VALUE")))
 	s.WriteString("\n")
 	for _, p := range m.previewParams {
-		value := m.truncateValue(p.Value)
+		lines := m.wrapValue(p.Value, valueWidth)
 		if p.IsSecure() {
-			value += helpStyle.Render(" //secureString")
+			lines[len(lines)-1] += helpStyle.Render(" //secureString")
 		}
-		fmt.Fprintf(s, "%-*s  %s\n", nameWidth, p.Name, value)
+		fmt.Fprintf(s, "%-*s  %s\n", nameWidth, p.Name, lines[0])
+		for _, cont := range lines[1:] {
+			fmt.Fprintf(s, "%s%s\n", indent, cont)
+		}
 	}
 	s.WriteString("\n")
 	s.WriteString(helpStyle.Render(fmt.Sprintf("%d parameter(s) will be uploaded. Press ENTER to confirm, ESC to go back.", len(m.previewParams))))
 	s.WriteString("\n")
 }
 
-// truncateValue collapses newlines and trims an overlong value for table display.
-// The full value is still uploaded; only the on-screen preview is shortened. The
-// receiver is unused; it keeps the helper grouped on Model.
-func (Model) truncateValue(v string) string {
+// wrapValue renders a value as one or more display lines no wider than width,
+// flattening embedded newlines first. The full value is still uploaded; only the
+// on-screen layout is wrapped. The receiver is unused; it keeps the helper grouped
+// on Model.
+func (Model) wrapValue(v string, width int) []string {
 	v = strings.ReplaceAll(v, "\n", "\\n")
-	if len(v) > confirmValueWidth {
-		return v[:confirmValueWidth] + "…"
+	if width <= 0 {
+		return []string{v}
 	}
-	return v
+	runes := []rune(v)
+	var lines []string
+	for len(runes) > width {
+		lines = append(lines, string(runes[:width]))
+		runes = runes[width:]
+	}
+	return append(lines, string(runes)) // final chunk (empty string for an empty value)
 }
 
 func (m Model) writeResult(s *strings.Builder) {

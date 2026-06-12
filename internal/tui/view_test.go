@@ -8,6 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
+
+	"hexyn-aws/internal/awsx"
 )
 
 func TestViewAlwaysRendersTitle(t *testing.T) {
@@ -25,6 +27,30 @@ func TestViewPinsFooterToBottom(t *testing.T) {
 	out := updated.(Model).View()
 
 	assert.Equal(t, 24, lipgloss.Height(out), "view should fill the screen height so the footer sits at the bottom")
+}
+
+func TestWrapValueChunksToWidth(t *testing.T) {
+	m := newTestModel(t)
+
+	assert.Equal(t, []string{"short"}, m.wrapValue("short", 10), "a short value stays on one line")
+	assert.Equal(t, []string{"abcde", "fghij", "k"}, m.wrapValue("abcdefghijk", 5), "a long value wraps into width-sized chunks")
+	assert.Equal(t, []string{`a\nb`}, m.wrapValue("a\nb", 10), "embedded newlines are flattened, not wrapped")
+	assert.Equal(t, []string{""}, m.wrapValue("", 10), "an empty value yields a single empty line")
+}
+
+func TestConfirmPutWrapsLongValues(t *testing.T) {
+	m := newTestModel(t)
+	m.action = "put"
+	m.env = "prod"
+	m.setupInputs()
+	m.inputs[0].SetValue("api")
+	m.state = stateConfirmPut
+	m.previewParams = []awsx.Parameter{{Name: "TOKEN", Value: "0123456789abcdefghij0123456789abcdefghij0123456789abcdefghij0123456789"}}
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+	out := updated.(Model).View()
+
+	assert.NotContains(t, out, "…", "long values should wrap, not be truncated")
+	assert.Contains(t, out, "0123456789abcdefghij", "the full value is shown across wrapped lines")
 }
 
 func TestViewLoginPrompt(t *testing.T) {
