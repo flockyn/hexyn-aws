@@ -37,6 +37,30 @@ func TestSSMGetByPathTrimsPrefix(t *testing.T) {
 	assert.True(t, got[1].IsSecure(), "DB_PASS should be SecureString")
 }
 
+func TestSSMGetByPathFollowsPagination(t *testing.T) {
+	api := mocks.NewMockSSMAPI(t)
+	api.EXPECT().GetParametersByPath(mock.Anything, mock.Anything).RunAndReturn(
+		func(_ context.Context, in *ssm.GetParametersByPathInput, _ ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error) {
+			if in.NextToken == nil {
+				return &ssm.GetParametersByPathOutput{
+					Parameters: []ssmtypes.Parameter{{Name: aws.String("/prod/api/A"), Value: aws.String("1")}},
+					NextToken:  aws.String("page2"),
+				}, nil
+			}
+			assert.Equal(t, "page2", aws.ToString(in.NextToken))
+			return &ssm.GetParametersByPathOutput{
+				Parameters: []ssmtypes.Parameter{{Name: aws.String("/prod/api/B"), Value: aws.String("2")}},
+			}, nil
+		})
+	s := &SSM{api: api, concurrency: 2}
+
+	got, err := s.GetByPath(context.Background(), awsx.ParamPath{Env: "prod", Repo: "api"})
+	require.NoError(t, err)
+	require.Len(t, got, 2, "expected params from both pages")
+	assert.Equal(t, "A", got[0].Name)
+	assert.Equal(t, "B", got[1].Name)
+}
+
 func TestSSMGetByNamesBatchesByTen(t *testing.T) {
 	var batches int32
 	api := mocks.NewMockSSMAPI(t)

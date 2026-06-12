@@ -40,27 +40,35 @@ func NewSSM(ctx context.Context, creds awsx.CredentialLoader, region string) (*S
 	return &SSM{api: ssm.NewFromConfig(cfg), concurrency: defaultPutConcurrency}, nil
 }
 
-// GetByPath retrieves all parameters under /<Env>/<Repo>/ from SSM.
+// GetByPath retrieves all parameters under /<Env>/<Repo>/ from SSM, following
+// pagination so every page is collected (SSM returns at most 10 per call).
 func (s *SSM) GetByPath(ctx context.Context, dest awsx.ParamPath) ([]awsx.Parameter, error) {
 	prefix := fmt.Sprintf("/%s/%s/", dest.Env, dest.Repo)
-	out, err := s.api.GetParametersByPath(ctx, &ssm.GetParametersByPathInput{
-		Path:           aws.String(prefix),
-		Recursive:      aws.Bool(true),
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		return nil, err
-	}
 
-	params := make([]awsx.Parameter, 0, len(out.Parameters))
-	for _, p := range out.Parameters {
-		params = append(params, awsx.Parameter{
-			Name:  strings.TrimPrefix(aws.ToString(p.Name), prefix),
-			Value: aws.ToString(p.Value),
-			Type:  s.toParamType(p.Type),
+	var params []awsx.Parameter
+	var nextToken *string
+	for {
+		out, err := s.api.GetParametersByPath(ctx, &ssm.GetParametersByPathInput{
+			Path:           aws.String(prefix),
+			Recursive:      aws.Bool(true),
+			WithDecryption: aws.Bool(true),
+			NextToken:      nextToken,
 		})
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range out.Parameters {
+			params = append(params, awsx.Parameter{
+				Name:  strings.TrimPrefix(aws.ToString(p.Name), prefix),
+				Value: aws.ToString(p.Value),
+				Type:  s.toParamType(p.Type),
+			})
+		}
+		if out.NextToken == nil {
+			return params, nil
+		}
+		nextToken = out.NextToken
 	}
-	return params, nil
 }
 
 // GetByNames resolves SSM paths to parameters, batching in groups of 10 as the
