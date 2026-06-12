@@ -42,7 +42,20 @@ func (f FS) parseLine(raw string) (awsx.Parameter, bool) {
 	if isSecure {
 		paramType = awsx.ParameterTypeSecureString
 	}
-	return awsx.Parameter{Name: key, Value: strings.TrimSpace(parts[1]), Type: paramType}, true
+	value := f.unwrapQuotes(strings.TrimSpace(parts[1]))
+	return awsx.Parameter{Name: key, Value: value, Type: paramType}, true
+}
+
+// unwrapQuotes removes one matching pair of surrounding single or double quotes,
+// so a shell-quoted value (e.g. CONFIG='{"foo":"bar"}') does not keep its
+// wrapping quotes. Inner text, and unmatched or single quotes, are left as-is.
+func (FS) unwrapQuotes(s string) string {
+	if len(s) >= 2 {
+		if c := s[0]; (c == '\'' || c == '"') && s[len(s)-1] == c {
+			return s[1 : len(s)-1]
+		}
+	}
+	return s
 }
 
 // secureMarkerIndex returns the index of the "//secureString" comment marker, or
@@ -62,4 +75,64 @@ func (FS) secureMarkerIndex(line string) int {
 		}
 		from = idx + 2
 	}
+}
+
+// jsonValueOpens reports whether line's value begins a JSON object or array that
+// is not yet closed, so the following lines belong to the same value.
+func (f FS) jsonValueOpens(line string) bool {
+	value, ok := f.jsonValuePart(line)
+	return ok && f.jsonDepth(value) > 0
+}
+
+// jsonValueComplete reports whether the accumulated JSON value has balanced its
+// braces and brackets. A value that is no longer JSON is treated as complete.
+func (f FS) jsonValueComplete(entry string) bool {
+	value, ok := f.jsonValuePart(entry)
+	if !ok {
+		return true
+	}
+	return f.jsonDepth(value) <= 0
+}
+
+// jsonValuePart returns the JSON value side of a "KEY=VALUE" entry, ok=false if it
+// does not open with "{" or "[". Leading whitespace and a single wrapping quote
+// ('...' or "...") are stripped so shell-quoted values are recognised.
+func (FS) jsonValuePart(s string) (string, bool) {
+	_, after, found := strings.Cut(s, "=")
+	if !found {
+		return "", false
+	}
+	value := strings.TrimLeft(after, " \t")
+	value = strings.TrimPrefix(value, "'")
+	value = strings.TrimPrefix(value, `"`)
+	if value == "" || (value[0] != '{' && value[0] != '[') {
+		return "", false
+	}
+	return value, true
+}
+
+// jsonDepth returns the net brace/bracket nesting depth of s. Characters inside
+// double-quoted strings (honouring backslash escapes) are ignored, so braces
+// within a string value do not skew the count.
+func (FS) jsonDepth(s string) int {
+	depth := 0
+	inString := false
+	escaped := false
+	for _, r := range s {
+		switch {
+		case escaped:
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case r == '"':
+			inString = !inString
+		case inString:
+			// literal character inside a JSON string
+		case r == '{', r == '[':
+			depth++
+		case r == '}', r == ']':
+			depth--
+		}
+	}
+	return depth
 }

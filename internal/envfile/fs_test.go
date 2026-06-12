@@ -77,3 +77,80 @@ func TestSecureMarkerIndex(t *testing.T) {
 		assert.Equalf(t, tc.want, got, "secureMarkerIndex(%q)", tc.line)
 	}
 }
+
+func TestUnwrapQuotes(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`'wrapped'`, "wrapped"},
+		{`"wrapped"`, "wrapped"},
+		{`'{"a":1}'`, `{"a":1}`},
+		{"unquoted", "unquoted"},
+		{`'mismatched"`, `'mismatched"`}, // different open/close quotes
+		{`'only-leading`, `'only-leading`},
+		{`trailing'`, `trailing'`},
+		{"it's fine", "it's fine"}, // apostrophe inside, not a wrapper
+		{"", ""},
+		{`'`, `'`}, // single char, no pair
+		{`''`, ""}, // empty wrapped
+		{`""`, ""},
+	}
+	for _, tc := range cases {
+		assert.Equalf(t, tc.want, (FS{}).unwrapQuotes(tc.in), "unwrapQuotes(%q)", tc.in)
+	}
+}
+
+func TestJSONDepth(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int
+	}{
+		{"", 0},
+		{`{"a":1}`, 0},
+		{`[1,2,3]`, 0},
+		{`{"a":`, 1},
+		{`{"a":{"b":[`, 3},
+		{`}}`, -2},
+		{`{"t":"a{b}c"}`, 0},     // braces inside a string are ignored
+		{`["a[b]c"]`, 0},         // brackets inside a string are ignored
+		{`{"t":"a\"{b"}`, 0},     // escaped quote keeps string open
+		{`{} //secureString`, 0}, // trailing marker has no braces
+	}
+	for _, tc := range cases {
+		assert.Equalf(t, tc.want, (FS{}).jsonDepth(tc.in), "jsonDepth(%q)", tc.in)
+	}
+}
+
+func TestJSONValuePart(t *testing.T) {
+	cases := []struct {
+		line   string
+		want   string
+		wantOK bool
+	}{
+		{`CFG={"a":1}`, `{"a":1}`, true},
+		{`CFG=  {"a":1}`, `{"a":1}`, true},  // leading whitespace stripped
+		{`CFG='{"a":1}'`, `{"a":1}'`, true}, // leading quote dropped, trailing kept
+		{`CFG="{"a":1}"`, `{"a":1}"`, true}, // double quote variant
+		{`CFG=[1,2]`, `[1,2]`, true},        // array opener
+		{`CFG=plain`, "", false},            // not JSON
+		{`CFG=`, "", false},                 // empty value
+		{`noequals`, "", false},             // no "="
+	}
+	for _, tc := range cases {
+		got, ok := (FS{}).jsonValuePart(tc.line)
+		assert.Equalf(t, tc.wantOK, ok, "jsonValuePart(%q) ok", tc.line)
+		assert.Equalf(t, tc.want, got, "jsonValuePart(%q) value", tc.line)
+	}
+}
+
+func TestJSONValueOpens(t *testing.T) {
+	assert.True(t, (FS{}).jsonValueOpens(`CFG={"a":`))    // unclosed object
+	assert.True(t, (FS{}).jsonValueOpens(`CFG='{`))       // quoted, unclosed
+	assert.False(t, (FS{}).jsonValueOpens(`CFG={"a":1}`)) // complete on one line
+	assert.False(t, (FS{}).jsonValueOpens(`CFG=plain`))   // not JSON
+}
+
+func TestJSONValueComplete(t *testing.T) {
+	assert.True(t, (FS{}).jsonValueComplete(`CFG={"a":1}`)) // balanced
+	assert.True(t, (FS{}).jsonValueComplete(`CFG={"a":1}' //secureString`))
+	assert.True(t, (FS{}).jsonValueComplete(`CFG=plain`))  // not JSON -> complete
+	assert.False(t, (FS{}).jsonValueComplete(`CFG={"a":`)) // still open
+}
