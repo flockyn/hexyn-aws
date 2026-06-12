@@ -478,13 +478,15 @@
         async function loadChangelog() {
             const list = document.getElementById('changelog-list');
             try {
-                const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=10`, {
+                const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=1`, {
                     headers: { 'Accept': 'application/vnd.github+json' }
                 });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = await res.json();
                 if (!Array.isArray(data) || data.length === 0) throw new Error('no releases');
-                list.innerHTML = data.map(releaseCard).join('');
+                // Show only the latest release; older ones are reachable via the
+                // "View all releases on GitHub" link below.
+                list.innerHTML = releaseCard(data[0]);
                 setVersion(data[0].tag_name);
             } catch (e) {
                 // No hardcoded fallback: on failure (offline / rate-limited),
