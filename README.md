@@ -58,6 +58,28 @@ hexyn-aws --init
 ```
 When in portable mode, the tool will prioritize the local `./.hexyn-aws/input/` and `./.hexyn-aws/output/` folders.
 
+### Configuration File
+Hexyn AWS reads an optional, INI-style file at `.hexyn-aws/config` (`[section]`
+headers and `key=value` pairs; `#` or `;` start a comment). A commented example is
+created automatically on first run, and you can edit it from the in-app **Settings**
+menu.
+
+**Repo name prefixes** — when deriving a default SSM repo name from an ECS service
+name, Hexyn AWS strips a configurable, comma-separated set of prefixes (most
+specific first):
+```ini
+# .hexyn-aws/config
+[repository]
+prefix=team-service-,team-,service-
+# e.g. service "team-service-orders" → repo "orders"
+```
+The `HEXYN_REPO_PREFIXES` environment variable (comma-separated) overrides the
+config file. When none of these are set, no prefix is stripped (the service name is
+used as-is):
+```bash
+export HEXYN_REPO_PREFIXES="team-service-,team-,service-"
+```
+
 ### Keyboard Shortcuts
 - **L**: Trigger Login / Change Session
 - **G**: Change AWS Region
