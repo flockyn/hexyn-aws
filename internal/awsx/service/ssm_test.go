@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -108,4 +109,28 @@ func TestSSMPutCountsSuccessesAndErrors(t *testing.T) {
 	assert.Equal(t, 2, ok, "expected 2 successes")
 	assert.Len(t, errs, 1, "expected 1 error")
 	assert.Equal(t, int32(3), putCalls, "expected 3 PutParameter calls")
+}
+
+type mockAPIError struct {
+	code string
+	msg  string
+}
+
+func (m mockAPIError) ErrorCode() string             { return m.code }
+func (m mockAPIError) ErrorMessage() string          { return m.msg }
+func (m mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultUnknown }
+func (m mockAPIError) Error() string                 { return fmt.Sprintf("%s: %s", m.code, m.msg) }
+
+func TestFormatAWS(t *testing.T) {
+	apiErr := mockAPIError{code: "AccessDenied", msg: "User is not authorized"}
+	wrapped := fmt.Errorf("wrapper: %w", apiErr)
+
+	err := formatAWS(wrapped)
+	require.NotNil(t, err)
+	assert.Equal(t, "User is not authorized", err.Error())
+
+	stdErr := errors.New("standard error")
+	assert.Equal(t, "standard error", formatAWS(stdErr).Error())
+
+	assert.Nil(t, formatAWS(nil))
 }

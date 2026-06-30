@@ -5,6 +5,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	"github.com/aws/smithy-go"
 
 	"hexyn-aws/internal/awsx"
 )
@@ -55,7 +57,7 @@ func (s *SSM) GetByPath(ctx context.Context, dest awsx.ParamPath) ([]awsx.Parame
 			NextToken:      nextToken,
 		})
 		if err != nil {
-			return nil, err
+			return nil, formatAWS(err)
 		}
 		for _, p := range out.Parameters {
 			params = append(params, awsx.Parameter{
@@ -94,7 +96,7 @@ func (s *SSM) GetByNames(ctx context.Context, nameMap map[string]string) ([]awsx
 			WithDecryption: aws.Bool(true),
 		})
 		if err != nil {
-			return nil, err
+			return nil, formatAWS(err)
 		}
 		results = append(results, s.mapParameters(out.Parameters, ssmToEnv)...)
 	}
@@ -140,7 +142,9 @@ func (s *SSM) Put(ctx context.Context, dest awsx.ParamPath, params []awsx.Parame
 	)
 
 	for range concurrency {
-		wg.Go(func() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			for p := range paramChan {
 				if err := s.putOne(ctx, dest, p); err != nil {
 					errChan <- err
@@ -150,7 +154,7 @@ func (s *SSM) Put(ctx context.Context, dest awsx.ParamPath, params []awsx.Parame
 					mu.Unlock()
 				}
 			}
-		})
+		}()
 	}
 
 	for _, p := range params {
@@ -180,16 +184,29 @@ func (s *SSM) putOne(ctx context.Context, dest awsx.ParamPath, p awsx.Parameter)
 		Overwrite: aws.Bool(true),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to upload %s: %w", name, err)
+		return fmt.Errorf("failed to upload %s: %w", name, formatAWS(err))
 	}
 	return nil
 }
 
 // toParamType maps an SSM SDK parameter type to the domain type. The receiver is
 // unused; it is a method to keep SSM's helpers grouped on the type.
-func (*SSM) toParamType(t ssmtypes.ParameterType) awsx.ParameterType {
+func (s *SSM) toParamType(t ssmtypes.ParameterType) awsx.ParameterType {
 	if t == ssmtypes.ParameterTypeSecureString {
 		return awsx.ParameterTypeSecureString
 	}
 	return awsx.ParameterTypeString
+}
+
+// formatAWS attempts to unwrap a smithy.APIError for a cleaner user-facing message,
+// falling back to the raw error if not recognized.
+func formatAWS(err error) error {
+	if err == nil {
+		return nil
+	}
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		return errors.New(apiErr.ErrorMessage())
+	}
+	return err
 }
