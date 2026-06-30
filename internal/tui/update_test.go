@@ -12,14 +12,14 @@ import (
 	"hexyn-aws/test/fixtures"
 )
 
-func TestMenuEnterAdvancesToEnvSelect(t *testing.T) {
+func TestMenuEnterAdvancesToLoadingClusters(t *testing.T) {
 	m := newTestModel(t)
 	m.state = stateMenu
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got := updated.(Model)
 
-	assert.Equal(t, stateSelectEnv, got.state)
+	assert.Equal(t, stateLoading, got.state)
 	assert.Equal(t, "get", got.action, "expected action 'get' (first menu item)")
 }
 
@@ -177,7 +177,6 @@ func TestHelpKeyShowsHelpResult(t *testing.T) {
 func TestSelectionTitle(t *testing.T) {
 	cases := map[state]string{
 		stateSelectRegion:  "Select AWS Region",
-		stateSelectEnv:     "Select Environment",
 		stateSelectCluster: "Select Cluster",
 		stateSelectService: "Select Service",
 		stateSelectMethod:  "Select Retrieval Method",

@@ -13,7 +13,7 @@ import (
 // isSelectorState reports whether the current state is driven by the shared selector list.
 func (m Model) isSelectorState() bool {
 	switch m.state {
-	case stateSelectRegion, stateSelectEnv, stateSelectCluster, stateSelectService, stateSelectMethod:
+	case stateSelectRegion, stateSelectCluster, stateSelectService, stateSelectMethod:
 		return true
 	default:
 		return false
@@ -169,8 +169,6 @@ func (m Model) selectionTitle() string {
 	switch m.state {
 	case stateSelectRegion:
 		return "Select AWS Region"
-	case stateSelectEnv:
-		return "Select Environment"
 	case stateSelectCluster:
 		return "Select Cluster"
 	case stateSelectService:
@@ -223,33 +221,11 @@ func (m Model) updateRegionSelector(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
 		m.action = m.mainMenu.SelectedItem().(item).action
-		envs := []list.Item{
-			item{title: "prod", desc: "Production Environment"},
-			item{title: "preprod", desc: "Pre-production Environment"},
-		}
-		m.selector.SetItems(envs)
-		m.selector.Title = "Select Environment"
-		m.selector.Select(0)
-		m.selector.ResetFilter()
-		m.state = stateSelectEnv
-		return m, nil
-	}
-	var cmd tea.Cmd
-	m.mainMenu, cmd = m.mainMenu.Update(msg)
-	return m, cmd
-}
-
-func (m Model) updateEnvSelector(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
-		if m.selector.SelectedItem() == nil {
-			return m, nil
-		}
-		m.env = m.selector.SelectedItem().(item).title
 		m.state = stateLoading
 		return m, m.cmds.listClusters(m.session.Region)
 	}
 	var cmd tea.Cmd
-	m.selector, cmd = m.selector.Update(msg)
+	m.mainMenu, cmd = m.mainMenu.Update(msg)
 	return m, cmd
 }
 
@@ -345,7 +321,7 @@ func (m Model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) submitInputs() (tea.Model, tea.Cmd) {
 	if m.action == "put" {
 		m.state = stateLoading
-		return m, m.cmds.previewPut(m.inputs[1].Value())
+		return m, m.cmds.previewPut(m.inputs[2].Value())
 	}
 	m.state = stateExecuting
 	return m, m.executeAction()
@@ -363,20 +339,21 @@ func (m Model) updateInputFields(msg tea.Msg) tea.Cmd {
 func (m Model) executeAction() tea.Cmd {
 	switch m.action {
 	case "get":
+		env := m.inputs[0].Value()
 		outDir := m.inputs[len(m.inputs)-1].Value()
 		if m.method == "tdf" {
 			return m.cmds.getByTaskDef(secrets.TaskTarget{
 				Region: m.session.Region, Cluster: m.cluster, Service: m.service, OutputDir: outDir,
-				Env: m.env, Repo: m.cleanRepoName(m.service),
+				Env: env, Repo: m.cleanRepoName(m.service),
 			})
 		}
 		return m.cmds.getByPath(secrets.ParamTarget{
-			Env: m.env, Repo: m.inputs[0].Value(), Region: m.session.Region,
+			Env: env, Repo: m.inputs[1].Value(), Region: m.session.Region,
 			Cluster: m.cluster, Service: m.service,
 		}, outDir)
 	case "put":
-		target := secrets.ParamTarget{Env: m.env, Repo: m.inputs[0].Value(), Region: m.session.Region}
-		return m.cmds.putParameters(target, m.inputs[1].Value())
+		target := secrets.ParamTarget{Env: m.inputs[0].Value(), Repo: m.inputs[1].Value(), Region: m.session.Region}
+		return m.cmds.putParameters(target, m.inputs[2].Value())
 	}
 	return nil
 }

@@ -23,8 +23,8 @@ func TestUpdateWindowSizeStoresDimensions(t *testing.T) {
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	got := updated.(Model)
 
-	assert.Equal(t, 80, got.width)
-	assert.Equal(t, 24, got.height)
+	assert.Equal(t, 78, got.width)  // 80 - 2 (horizontal padding)
+	assert.Equal(t, 24, got.height) // 24 - 0 (vertical padding)
 }
 
 func TestSessionMsgRoutes(t *testing.T) {

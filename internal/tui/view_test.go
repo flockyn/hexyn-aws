@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
@@ -41,9 +40,9 @@ func TestWrapValueChunksToWidth(t *testing.T) {
 func TestConfirmPutWrapsLongValues(t *testing.T) {
 	m := newTestModel(t)
 	m.action = "put"
-	m.env = "prod"
 	m.setupInputs()
-	m.inputs[0].SetValue("api")
+	m.inputs[0].SetValue("prod") // Environment
+	m.inputs[1].SetValue("api")  // Repo Name
 	m.state = stateConfirmPut
 	m.previewParams = []awsx.Parameter{{Name: "TOKEN", Value: "0123456789abcdefghij0123456789abcdefghij0123456789abcdefghij0123456789"}}
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
@@ -79,22 +78,16 @@ func TestViewResultSuccessAndError(t *testing.T) {
 
 func TestViewConfirmTaskDefMethodShowsSummary(t *testing.T) {
 	m := newTestModel(t)
-	m.state = stateSelectService
 	m.action = "get"
-	m.env = "prod"
 	m.cluster = "prod-cluster"
 	m.service = "service-api"
-	m.selector.SetItems([]list.Item{item{title: "service-api"}})
-	m.selector.Select(0)
+	m.method = "tdf"
+	m.setupInputs()
+	m.inputs[0].SetValue("prod") // Environment
+	m.state = stateInputs
 
-	updated, _ := m.selectCurrent()
-	mu := updated.(Model)
-	mu.method = "tdf"
-	mu.setupInputs()
-	mu.state = stateInputs
-
-	out := mu.View()
-	for _, want := range []string{"Confirm details:", "GET", "prod", "prod-cluster", "service-api", "From Task Definition", "Output Subdirectory Name"} {
+	out := m.View()
+	for _, want := range []string{"Confirm details:", "GET", "prod-cluster", "service-api", "From Task Definition", "Output Subdirectory Name"} {
 		assert.Containsf(t, out, want, "tdf confirmation missing %q", want)
 	}
 }
@@ -102,15 +95,15 @@ func TestViewConfirmTaskDefMethodShowsSummary(t *testing.T) {
 func TestViewConfirmPathMethodShowsSummaryAndInput(t *testing.T) {
 	m := newTestModel(t)
 	m.action = "get"
-	m.env = "preprod"
 	m.cluster = "c1"
 	m.service = "service-billing"
 	m.method = "path"
 	m.setupInputs()
+	m.inputs[0].SetValue("preprod") // Environment
 	m.state = stateInputs
 
 	out := m.View()
-	for _, want := range []string{"By Path Prefix", "preprod", "SSM Repo Name"} {
+	for _, want := range []string{"By Path Prefix", "SSM Repo Name"} {
 		assert.Containsf(t, out, want, "path confirmation missing %q", want)
 	}
 }

@@ -7,7 +7,6 @@ const (
 	stateLogin
 	stateSelectRegion
 	stateMenu
-	stateSelectEnv
 	stateLoading
 	stateSelectCluster
 	stateSelectService

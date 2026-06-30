@@ -16,4 +16,5 @@ var (
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	sourceStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	keyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("62")).Bold(true)
+	appStyle     = lipgloss.NewStyle().Padding(0, 1)
 )

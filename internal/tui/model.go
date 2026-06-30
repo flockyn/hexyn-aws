@@ -40,7 +40,6 @@ type Model struct {
 	focusIndex    int
 	action        string
 	method        string
-	env           string
 	cluster       string
 	service       string
 	result        string
@@ -101,10 +100,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.mainMenu.SetSize(msg.Width, msg.Height-12)
-		m.selector.SetSize(msg.Width, msg.Height-12)
+		h, v := appStyle.GetFrameSize()
+		m.width = msg.Width - h
+		m.height = msg.Height - v
+		listHeight := max(m.height-12, 5)
+		m.mainMenu.SetSize(m.width, listHeight)
+		m.selector.SetSize(m.width, listHeight)
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -136,8 +137,6 @@ func (m Model) updateForState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateRegionSelector(msg)
 	case stateMenu:
 		return m.updateMenu(msg)
-	case stateSelectEnv:
-		return m.updateEnvSelector(msg)
 	case stateSelectCluster, stateSelectService, stateSelectMethod:
 		return m.updateSelector(msg)
 	case stateInputs:

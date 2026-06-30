@@ -26,12 +26,18 @@ func (m Model) View() string {
 
 	content := s.String()
 	footer := m.footerView()
+
+	if m.width > 0 {
+		content = lipgloss.NewStyle().Width(m.width).Render(content)
+		footer = lipgloss.NewStyle().Width(m.width).Render(footer)
+	}
+
 	if m.height == 0 { // size unknown yet (no WindowSizeMsg) — fall back to flow layout
-		return content + "\n\n" + footer
+		return appStyle.Render(content + "\n\n" + footer)
 	}
 	// Pad so the footer sits on the last row(s); +1 turns the row gap into newlines.
-	gap := max(m.height-lipgloss.Height(content)-lipgloss.Height(footer)+1, 2)
-	return content + strings.Repeat("\n", gap) + footer
+	gap := max(m.height-lipgloss.Height(content)-lipgloss.Height(footer)+1, 1)
+	return appStyle.Render(content + strings.Repeat("\n", gap) + footer)
 }
 
 // writeSessionHeader renders the account / identity / region / config-path block.
@@ -67,7 +73,7 @@ func (m Model) writeBody(s *strings.Builder) {
 		s.WriteString(" Verifying AWS Session...")
 	case stateLogin:
 		m.writeLogin(s)
-	case stateSelectRegion, stateSelectEnv, stateSelectCluster, stateSelectService, stateSelectMethod:
+	case stateSelectRegion, stateSelectCluster, stateSelectService, stateSelectMethod:
 		s.WriteString(m.selector.View())
 	case stateMenu:
 		s.WriteString(m.mainMenu.View())
@@ -142,7 +148,6 @@ func (m Model) writeSummary(s *strings.Builder) {
 		s.WriteString("\n")
 	}
 	writeField("Operation:    ", strings.ToUpper(m.action))
-	writeField("Environment:  ", m.env)
 	writeField("Cluster:      ", m.cluster)
 	writeField("Service:      ", m.service)
 	writeField("Method:       ", m.methodLabel())
@@ -182,7 +187,7 @@ func (m Model) writeConfirmPut(s *strings.Builder) {
 	s.WriteString("\n\n")
 	m.writeSummary(s)
 	s.WriteString(focusedStyle.Render("Destination:  "))
-	fmt.Fprintf(s, "/%s/%s/", m.env, m.inputs[0].Value())
+	fmt.Fprintf(s, "/%s/%s/", m.inputs[0].Value(), m.inputs[1].Value())
 	s.WriteString("\n\n")
 
 	if len(m.previewParams) == 0 {
@@ -254,7 +259,7 @@ func (m Model) footerView() string {
 	switch m.state {
 	case stateMenu:
 		items = append(items, keyStyle.Render("L")+" Login", keyStyle.Render("G")+" Region", keyStyle.Render("H")+" Help")
-	case stateSelectEnv, stateSelectCluster, stateSelectService, stateSelectMethod:
+	case stateSelectCluster, stateSelectService, stateSelectMethod:
 		items = append(items, keyStyle.Render("ESC")+" Back", keyStyle.Render("/")+" Search", keyStyle.Render("H")+" Help")
 	case stateInputs, stateLogin:
 		esc := keyStyle.Render("ESC") + " Back"

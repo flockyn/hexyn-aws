@@ -27,9 +27,9 @@ func TestSetupInputsForPut(t *testing.T) {
 
 	m.setupInputs()
 
-	require.Len(t, m.inputs, 2)
-	assert.Equal(t, "orders", m.inputs[0].Value(), "repo name not cleaned")
-	assert.Equal(t, "orders.env", m.inputs[1].Value(), "file name default wrong")
+	require.Len(t, m.inputs, 3)
+	assert.Equal(t, "orders", m.inputs[1].Value(), "repo name not cleaned")
+	assert.Equal(t, "orders.env", m.inputs[2].Value(), "file name default wrong")
 }
 
 func TestSetupInputsForGetPath(t *testing.T) {
@@ -41,9 +41,9 @@ func TestSetupInputsForGetPath(t *testing.T) {
 
 	m.setupInputs()
 
-	// get/path: SSM Repo Name + Output Subdirectory Name.
-	require.Len(t, m.inputs, 2)
-	assert.Equal(t, "users", m.inputs[0].Value(), "repo name not cleaned")
+	// get/path: Environment + SSM Repo Name + Output Subdirectory Name.
+	require.Len(t, m.inputs, 3)
+	assert.Equal(t, "users", m.inputs[1].Value(), "repo name not cleaned")
 	assert.Equal(t, "Output Subdirectory Name", m.inputs[len(m.inputs)-1].Placeholder, "last input should be the output dir")
 }
 
@@ -56,10 +56,10 @@ func TestSetupInputsForGetTaskDefHasOutputDir(t *testing.T) {
 
 	m.setupInputs()
 
-	// get/tdf: only the Output Subdirectory Name (the SSM path comes from the TDF).
-	require.Len(t, m.inputs, 1)
-	assert.Equal(t, "Output Subdirectory Name", m.inputs[0].Placeholder, "expected output dir input")
-	assert.Equal(t, "users", m.inputs[0].Value(), "output dir should default to cleaned service")
+	// get/tdf: Environment + Output Subdirectory Name (the SSM path comes from the TDF).
+	require.Len(t, m.inputs, 2)
+	assert.Equal(t, "Output Subdirectory Name", m.inputs[1].Placeholder, "expected output dir input")
+	assert.Equal(t, "users", m.inputs[1].Value(), "output dir should default to cleaned service")
 }
 
 func TestFocusNavigationCycles(t *testing.T) {

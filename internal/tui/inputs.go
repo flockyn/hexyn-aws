@@ -40,6 +40,9 @@ func (m *Model) setupInputs() {
 
 	cleanRepo := m.cleanRepoName(m.service)
 
+	// Suffix Path is always the first input for all actions.
+	m.inputs = append(m.inputs, m.createInput("Suffix Path (e.g. prod, preprod)", ""))
+
 	switch m.action {
 	case "get":
 		if m.method == "path" {
